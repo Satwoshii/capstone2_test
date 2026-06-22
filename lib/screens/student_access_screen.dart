@@ -1,0 +1,294 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import 'package:window_manager/window_manager.dart';
+
+import '../models/app_user.dart';
+import '../models/issue_report.dart';
+import '../models/pc_identity.dart';
+import '../services/local_db_service.dart';
+import '../services/sync_service.dart';
+import '../services/windows_hardware_service.dart';
+import 'role_select_screen.dart';
+
+class StudentAccessScreen extends StatefulWidget {
+  final AppUser user;
+  final PcIdentity pc;
+  final String loginLogId;
+
+  const StudentAccessScreen({
+    super.key,
+    required this.user,
+    required this.pc,
+    required this.loginLogId,
+  });
+
+  @override
+  State<StudentAccessScreen> createState() => _StudentAccessScreenState();
+}
+
+class _StudentAccessScreenState extends State<StudentAccessScreen> {
+  final _uuid = const Uuid();
+
+  Timer? _autoMinimizeTimer;
+  Timer? _monitorTimer;
+
+  bool _checking = false;
+  bool _dialogVisible = false;
+  DateTime? _lastReportAt;
+  int _secondsLeft = 5;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _startAutoMinimizeTimer();
+
+    _monitorTimer = Timer.periodic(
+      const Duration(minutes: 2),
+          (_) => _backgroundHardwareCheck(),
+    );
+  }
+
+  void _startAutoMinimizeTimer() {
+    _autoMinimizeTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (!mounted) return;
+
+      setState(() {
+        _secondsLeft--;
+      });
+
+      if (_secondsLeft <= 0) {
+        timer.cancel();
+        await _minimizeToBackground();
+      }
+    });
+  }
+
+  Future<void> _minimizeToBackground() async {
+    try {
+      await windowManager.minimize();
+    } catch (_) {}
+  }
+
+  Future<void> _backgroundHardwareCheck() async {
+    if (_checking || _dialogVisible) return;
+
+    _checking = true;
+
+    try {
+      final result = await WindowsHardwareService.checkHardware();
+      final issues = result.failedComponents;
+
+      if (issues.isEmpty || !mounted) return;
+
+      if (_lastReportAt != null &&
+          DateTime.now().difference(_lastReportAt!) <
+              const Duration(minutes: 10)) {
+        return;
+      }
+
+      _dialogVisible = true;
+
+      await windowManager.restore();
+      await windowManager.focus();
+
+      final shouldSendReport = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          Timer(const Duration(seconds: 30), () {
+            if (Navigator.of(dialogContext).canPop()) {
+              Navigator.of(dialogContext).pop(true);
+            }
+          });
+
+          return AlertDialog(
+            title: const Text('Hardware problem detected'),
+            content: Text(
+              'Detected: ${issues.join(', ')}.\n\n'
+                  'Choose "Already fixed" if the device is working. '
+                  'If there is no response within 30 seconds, the report is sent automatically.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Already fixed'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Send report'),
+              ),
+            ],
+          );
+        },
+      );
+
+      _dialogVisible = false;
+
+      if (shouldSendReport == true) {
+        await _saveAutoReport(issues);
+      }
+
+      await _minimizeToBackground();
+    } finally {
+      _checking = false;
+      _dialogVisible = false;
+    }
+  }
+
+  Future<void> _saveAutoReport(List<String> issues) async {
+    final report = IssueReport(
+      id: _uuid.v4(),
+      studentEmail: widget.user.email,
+      pcNumber: widget.pc.pcId,
+      room: widget.pc.roomName,
+      issueType: issues.join(', '),
+      description: 'Hardware problem detected during an active student session.',
+      severity: issues.contains('storage') ? 'high' : 'medium',
+      source: 'background_hardware_check',
+      detectedBySystem: true,
+      createdAt: DateTime.now(),
+    );
+
+    await LocalDbService.instance.insertIssueReport(report.toLocalMap());
+
+    _lastReportAt = DateTime.now();
+
+    await SyncService.instance.syncPendingData();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('The issue report was saved.')),
+    );
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    _autoMinimizeTimer?.cancel();
+    _monitorTimer?.cancel();
+
+    await LocalDbService.instance.logout(widget.loginLogId);
+    await SyncService.instance.syncPendingData();
+
+    try {
+      await windowManager.restore();
+      await windowManager.focus();
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _autoMinimizeTimer?.cancel();
+    _monitorTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        backgroundColor: Colors.green.shade50,
+        body: Center(
+          child: SizedBox(
+            width: 620,
+            child: Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 90,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'ACCESS GRANTED',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 34,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      widget.user.displayName,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                    Text(
+                      widget.user.studentId ?? widget.user.email,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const Divider(height: 36),
+                    Text(
+                      '${widget.pc.roomName} - ${widget.pc.pcId}',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This window will minimize in $_secondsLeft second(s).',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Hardware monitoring will continue in the background.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 20),
+                    ValueListenableBuilder<int>(
+                      valueListenable: SyncService.instance.pendingItems,
+                      builder: (_, pending, __) {
+                        return Chip(
+                          avatar: const Icon(Icons.sync, size: 18),
+                          label: Text('$pending pending sync item(s)'),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _minimizeToBackground,
+                          icon: const Icon(Icons.minimize),
+                          label: const Text('Minimize Now'),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => _logout(context),
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Logout'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
