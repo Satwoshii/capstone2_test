@@ -35,7 +35,6 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
   bool keyboardOk = true;
   bool monitorOk = true;
   bool networkOk = true;
-  bool storageOk = true;
   List<String> _warnings = const [];
   List<String> _suggestions = const [];
 
@@ -54,7 +53,6 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
       keyboardOk = result.keyboardDetected;
       monitorOk = result.monitorDetected;
       networkOk = result.networkDetected;
-      storageOk = result.storageHealthy;
       _warnings = result.warnings;
       _checking = false;
     });
@@ -67,7 +65,6 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
     if (!keyboardOk) result.add('keyboard');
     if (!monitorOk) result.add('monitor');
     if (!networkOk) result.add('network');
-    if (!storageOk) result.add('storage');
     return result;
   }
 
@@ -106,7 +103,7 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
           description: _descriptionController.text.trim().isEmpty
               ? 'A problem was detected and confirmed during startup checking.'
               : _descriptionController.text.trim(),
-          severity: storageOk ? 'medium' : 'high',
+          severity: 'medium',
           source: 'startup_hardware_check',
           detectedBySystem: true,
           createdAt: now,
@@ -199,14 +196,17 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
                     Text('PC ${widget.pcNumber} • Room ${widget.room}'),
                     const SizedBox(height: 12),
                     const Text(
-                      'The system filled these values automatically. Double-check each component before submitting.',
+                      'The system filled these values automatically. Double-check the devices you can physically confirm before submitting.',
                     ),
                     const SizedBox(height: 12),
                     _conditionTile('Mouse', mouseOk, (v) => mouseOk = v),
                     _conditionTile('Keyboard', keyboardOk, (v) => keyboardOk = v),
                     _conditionTile('Monitor', monitorOk, (v) => monitorOk = v),
-                    _conditionTile('Network adapter', networkOk, (v) => networkOk = v),
-                    _conditionTile('Storage health', storageOk, (v) => storageOk = v),
+                    _conditionTile(
+                      'Ethernet / LAN connection',
+                      networkOk,
+                      (v) => networkOk = v,
+                    ),
                     if (_suggestions.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -222,16 +222,14 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
                     ],
                     if (_warnings.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      ExpansionTile(
-                        title: const Text('Recent Windows warnings'),
-                        children: _warnings
-                            .map(
-                              (warning) => ListTile(
-                                leading: const Icon(Icons.report_problem),
-                                title: Text(warning),
-                              ),
-                            )
-                            .toList(),
+                      const Card(
+                        child: ListTile(
+                          leading: Icon(Icons.health_and_safety),
+                          title: Text('System health checked automatically'),
+                          subtitle: Text(
+                            'CPU, RAM, and disk health are recorded for ITSO monitoring and do not need student confirmation.',
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 14),

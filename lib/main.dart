@@ -9,7 +9,9 @@ import 'package:window_manager/window_manager.dart';
 import 'firebase_options.dart';
 import 'screens/startup_screen.dart';
 import 'services/app_config_service.dart';
+import 'services/app_navigator.dart';
 import 'services/local_db_service.dart';
+import 'services/pc_monitor_service.dart';
 import 'services/startup_service.dart';
 import 'services/sync_service.dart';
 import 'services/tray_service.dart';
@@ -35,11 +37,11 @@ Future<void> main() async {
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.maximize();
+      await windowManager.setFullScreen(true);
       await windowManager.show();
       await windowManager.focus();
 
-      // Prevents the X button from fully closing the app.
-      // The app should hide to tray instead.
+      // Kiosk-like behavior: prevent closing with the X button.
       await windowManager.setPreventClose(true);
     });
 
@@ -63,6 +65,9 @@ Future<void> main() async {
 
   // Start sync in background.
   SyncService.instance.start();
+
+  // Start PC monitoring even before student login.
+  PcMonitorService.instance.start();
 }
 
 class HybridPcMonitoringApp extends StatelessWidget {
@@ -71,6 +76,7 @@ class HybridPcMonitoringApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'Hybrid PC Monitoring System',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

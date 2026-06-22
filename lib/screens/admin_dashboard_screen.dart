@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/firebase_user_service.dart';
 import '../services/sync_service.dart';
-import 'role_select_screen.dart';
+import 'staff_portal_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final AppUser user;
@@ -115,9 +115,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           IconButton(
             onPressed: () {
-              Navigator.pushReplacement(
+              Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+                MaterialPageRoute(builder: (_) => const StaffPortalScreen()),
+                (route) => false,
               );
             },
             icon: const Icon(Icons.logout),

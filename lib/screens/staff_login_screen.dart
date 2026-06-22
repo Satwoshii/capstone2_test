@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../services/firebase_user_service.dart';
-import '../widgets/simple_app_bar.dart';
 import 'admin_dashboard_screen.dart';
 import 'itso_dashboard_screen.dart';
 
 class StaffLoginScreen extends StatefulWidget {
-  final String requiredRole;
+  final VoidCallback? onBackToStudentKiosk;
 
   const StaffLoginScreen({
     super.key,
-    required this.requiredRole,
+    this.onBackToStudentKiosk,
   });
 
   @override
@@ -31,6 +30,8 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
   }
 
   Future<void> _login() async {
+    if (loading) return;
+
     setState(() {
       loading = true;
     });
@@ -41,13 +42,18 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
         password: passwordController.text.trim(),
       );
 
-      if (user.role != widget.requiredRole && user.role != 'admin') {
-        throw Exception('Access denied. This account is not allowed here.');
-      }
+      final role = user.role.trim().toLowerCase();
 
       if (!mounted) return;
 
-      if (widget.requiredRole == 'itso') {
+      if (role == 'admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AdminDashboardScreen(user: user),
+          ),
+        );
+      } else if (role == 'itso') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -55,19 +61,16 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
           ),
         );
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AdminDashboardScreen(user: user),
-          ),
-        );
+        throw Exception('Access denied. This account is not ITSO or Admin.');
       }
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll('Exception:', '').trim()),
+          content: Text(
+            e.toString().replaceAll('Exception:', '').trim(),
+          ),
         ),
       );
     } finally {
@@ -81,11 +84,15 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        widget.requiredRole == 'itso' ? 'ITSO Login' : 'Admin Login';
-
     return Scaffold(
-      appBar: simpleAppBar(title),
+      appBar: AppBar(
+        title: const Text('Staff Portal'),
+        leading: IconButton(
+          tooltip: 'Back to Student Kiosk',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBackToStudentKiosk ?? () => Navigator.pop(context),
+        ),
+      ),
       body: Center(
         child: SizedBox(
           width: 430,
@@ -95,19 +102,22 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    widget.requiredRole == 'itso'
-                        ? Icons.computer
-                        : Icons.admin_panel_settings,
+                  const Icon(
+                    Icons.admin_panel_settings,
                     size: 64,
                   ),
                   const SizedBox(height: 14),
-                  Text(
-                    title,
-                    style: const TextStyle(
+                  const Text(
+                    'Staff Login',
+                    style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Admin and ITSO accounts are separated by role after login.',
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
                   TextField(
@@ -116,6 +126,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       labelText: 'Email',
                       border: OutlineInputBorder(),
                     ),
+                    onSubmitted: (_) => _login(),
                   ),
                   const SizedBox(height: 14),
                   TextField(
@@ -125,6 +136,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                       labelText: 'Password',
                       border: OutlineInputBorder(),
                     ),
+                    onSubmitted: (_) => _login(),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -133,7 +145,9 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                     child: ElevatedButton.icon(
                       onPressed: loading ? null : _login,
                       icon: const Icon(Icons.login),
-                      label: Text(loading ? 'Logging in...' : 'Login'),
+                      label: Text(
+                        loading ? 'Logging in...' : 'Login',
+                      ),
                     ),
                   ),
                 ],

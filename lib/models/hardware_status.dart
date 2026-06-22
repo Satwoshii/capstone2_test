@@ -25,9 +25,9 @@ class HardwareStatus {
     required this.issues,
   });
 
-  bool get hasIssue => issues.isNotEmpty;
+  bool get hasIssue => failedComponents.isNotEmpty || issues.isNotEmpty;
 
-  // For PeripheralFormScreen compatibility
+  // Compatibility getters used by PeripheralFormScreen.
   bool get mouseDetected => mouseOk;
   bool get keyboardDetected => keyboardOk;
   bool get monitorDetected => monitorOk;
@@ -35,18 +35,38 @@ class HardwareStatus {
   bool get storageHealthy => diskOk;
   List<String> get warnings => issues;
 
-  // For StudentBlockScreen background checking
-  List<String> get failedComponents {
+  // Student-fixable/checkable items.
+  List<String> get peripheralIssues {
     final failed = <String>[];
 
     if (!mouseOk) failed.add('mouse');
     if (!keyboardOk) failed.add('keyboard');
     if (!monitorOk) failed.add('monitor');
-    if (!networkOk) failed.add('network');
-    if (!diskOk) failed.add('storage');
+    if (!networkOk) failed.add('ethernet');
 
     return failed;
   }
+
+  // PC health items should be handled by ITSO only.
+  List<String> get pcHealthIssues {
+    final failed = <String>[];
+
+    if (!cpuOk) failed.add('cpu');
+    if (!ramOk) failed.add('ram');
+    if (!diskOk) failed.add('disk');
+
+    return failed;
+  }
+
+  List<String> get failedComponents {
+    return [
+      ...peripheralIssues,
+      ...pcHealthIssues,
+    ];
+  }
+
+  bool get hasPeripheralIssue => peripheralIssues.isNotEmpty;
+  bool get hasPcHealthIssue => pcHealthIssues.isNotEmpty;
 
   Map<String, dynamic> toMap() {
     return {
@@ -61,6 +81,9 @@ class HardwareStatus {
       'printerOk': printerOk,
       'headsetOk': headsetOk,
       'issues': issues,
+      'peripheralIssues': peripheralIssues,
+      'pcHealthIssues': pcHealthIssues,
+      'failedComponents': failedComponents,
     };
   }
 

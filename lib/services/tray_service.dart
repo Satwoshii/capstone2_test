@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'sync_service.dart';
-
 class TrayService with TrayListener {
   TrayService._();
 
@@ -38,16 +36,6 @@ class TrayService with TrayListener {
           MenuItem(
             key: 'hide',
             label: 'Hide to Tray',
-          ),
-          MenuItem.separator(),
-          MenuItem(
-            key: 'sync',
-            label: 'Sync Now',
-          ),
-          MenuItem.separator(),
-          MenuItem(
-            key: 'exit',
-            label: 'Exit',
           ),
         ],
       ),
@@ -83,16 +71,6 @@ class TrayService with TrayListener {
 
       case 'hide':
         await hideToTray();
-        break;
-
-      case 'sync':
-        await SyncService.instance.syncPendingData();
-        break;
-
-      case 'exit':
-        trayManager.removeListener(this);
-        await trayManager.destroy();
-        await windowManager.destroy();
         break;
     }
   }

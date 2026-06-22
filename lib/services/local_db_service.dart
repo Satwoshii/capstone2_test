@@ -374,19 +374,27 @@ class LocalDbService {
       ];
     }
 
-    if (issue.contains('network')) {
+    if (issue.contains('network') || issue.contains('ethernet')) {
       return [
-        'Check if the LAN cable is connected.',
-        'Check if the network adapter is enabled.',
-        'Restart the router/switch connection if needed.',
+        'Check if the Ethernet/LAN cable is properly connected.',
+        'Check if the Ethernet port light is blinking.',
+        'Report to ITSO if the LAN cable or port is damaged.',
       ];
     }
 
-    if (issue.contains('storage')) {
+    if (issue.contains('storage') || issue.contains('disk')) {
       return [
         'Do not continue using the workstation if disk failure is detected.',
         'Report the issue to ITSO immediately.',
         'Backup important data if accessible.',
+      ];
+    }
+
+    if (issue.contains('cpu') || issue.contains('ram')) {
+      return [
+        'This is a system health issue and should be handled by ITSO.',
+        'Restart the workstation only if instructed by ITSO.',
+        'Use another workstation if the issue continues.',
       ];
     }
 

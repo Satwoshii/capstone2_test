@@ -9,8 +9,10 @@ import '../models/issue_report.dart';
 import '../models/pc_identity.dart';
 import '../services/local_db_service.dart';
 import '../services/sync_service.dart';
+import '../services/tray_service.dart';
 import '../services/windows_hardware_service.dart';
-import 'role_select_screen.dart';
+import 'pc_broken_screen.dart';
+import 'student_login_screen.dart';
 
 class StudentAccessScreen extends StatefulWidget {
   final AppUser user;
@@ -46,8 +48,8 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
     _startAutoMinimizeTimer();
 
     _monitorTimer = Timer.periodic(
-      const Duration(minutes: 2),
-          (_) => _backgroundHardwareCheck(),
+      const Duration(seconds: 10),
+      (_) => _backgroundHardwareCheck(),
     );
   }
 
@@ -68,7 +70,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
 
   Future<void> _minimizeToBackground() async {
     try {
-      await windowManager.minimize();
+      await TrayService.instance.hideToTray();
     } catch (_) {}
   }
 
@@ -91,47 +93,26 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
 
       _dialogVisible = true;
 
-      await windowManager.restore();
-      await windowManager.focus();
+      await _saveAutoReport(issues);
 
-      final shouldSendReport = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          Timer(const Duration(seconds: 30), () {
-            if (Navigator.of(dialogContext).canPop()) {
-              Navigator.of(dialogContext).pop(true);
-            }
-          });
+      try {
+        await windowManager.show();
+        await windowManager.restore();
+        await windowManager.setFullScreen(true);
+        await windowManager.focus();
+      } catch (_) {}
 
-          return AlertDialog(
-            title: const Text('Hardware problem detected'),
-            content: Text(
-              'Detected: ${issues.join(', ')}.\n\n'
-                  'Choose "Already fixed" if the device is working. '
-                  'If there is no response within 30 seconds, the report is sent automatically.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Already fixed'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Send report'),
-              ),
-            ],
-          );
-        },
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PcBrokenScreen(
+            pc: widget.pc,
+            hardware: result,
+          ),
+        ),
       );
-
-      _dialogVisible = false;
-
-      if (shouldSendReport == true) {
-        await _saveAutoReport(issues);
-      }
-
-      await _minimizeToBackground();
     } finally {
       _checking = false;
       _dialogVisible = false;
@@ -181,7 +162,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
 
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+      MaterialPageRoute(builder: (_) => const StudentLoginScreen()),
     );
   }
 

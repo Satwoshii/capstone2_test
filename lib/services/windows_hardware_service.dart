@@ -12,26 +12,25 @@ class WindowsHardwareService {
       final cpuOk = await _hasWmiDevice('Win32_Processor');
       final ramOk = await _hasWmiDevice('Win32_PhysicalMemory');
       final diskOk = await _diskHealthy();
-      final networkOk = await _hasWmiDevice('Win32_NetworkAdapter');
+      final networkOk = await _ethernetDetected();
       final keyboardOk = await _hasWmiDevice('Win32_Keyboard');
       final mouseOk = await _hasWmiDevice('Win32_PointingDevice');
       final monitorOk = await _hasWmiDevice('Win32_DesktopMonitor');
-      final webcamOk = await _hasPnPKeyword('camera');
-      final printerOk = await _hasWmiDevice('Win32_Printer');
-      final headsetOk = await _hasPnPKeyword('audio');
+      // The school-required peripherals are keyboard, mouse, monitor, and Ethernet.
+      // Other peripherals such as webcam, printer, and headset are not checked.
+      const webcamOk = true;
+      const printerOk = true;
+      const headsetOk = true;
 
       final issues = <String>[];
 
       if (!cpuOk) issues.add('CPU Not Detected');
       if (!ramOk) issues.add('RAM Failure or Not Detected');
       if (!diskOk) issues.add('Disk Failure');
-      if (!networkOk) issues.add('Network Adapter Not Detected');
+      if (!networkOk) issues.add('Ethernet / LAN Connection Not Detected');
       if (!keyboardOk) issues.add('Keyboard Missing');
       if (!mouseOk) issues.add('Mouse Disconnected');
       if (!monitorOk) issues.add('Monitor Not Detected');
-      if (!webcamOk) issues.add('Webcam Not Found');
-      if (!printerOk) issues.add('Printer Not Found');
-      if (!headsetOk) issues.add('Headset Not Found');
 
       return HardwareStatus(
         cpuOk: cpuOk,
@@ -58,6 +57,26 @@ class WindowsHardwareService {
         '-NoProfile',
         '-Command',
         '(Get-CimInstance $className | Measure-Object).Count',
+      ],
+    );
+
+    final output = result.stdout.toString().trim();
+    final count = int.tryParse(output) ?? 0;
+
+    return count > 0;
+  }
+
+
+  static Future<bool> _ethernetDetected() async {
+    final command =
+        "(Get-CimInstance Win32_NetworkAdapter | Where-Object { \$_.NetConnectionStatus -eq 2 -and (\$_.Name -match 'Ethernet|Realtek|Intel|LAN|GbE|PCIe') } | Measure-Object).Count";
+
+    final result = await Process.run(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        command,
       ],
     );
 

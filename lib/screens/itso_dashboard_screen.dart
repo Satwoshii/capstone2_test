@@ -4,7 +4,8 @@ import '../models/app_user.dart';
 import '../services/local_db_service.dart';
 import '../services/sync_service.dart';
 import '../widgets/dashboard_card.dart';
-import 'role_select_screen.dart';
+import 'staff_portal_screen.dart';
+import 'pc_config_screen.dart';
 
 class ItsoDashboardScreen extends StatefulWidget {
   final AppUser user;
@@ -97,6 +98,17 @@ class _ItsoDashboardScreenState extends State<ItsoDashboardScreen> {
         title: const Text('ITSO Dashboard'),
         actions: [
           IconButton(
+            tooltip: 'PC Configuration',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PcConfigScreen()),
+              );
+            },
+            icon: const Icon(Icons.settings),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
             onPressed: () async {
               await SyncService.instance.syncNow();
               await _load();
@@ -105,9 +117,10 @@ class _ItsoDashboardScreenState extends State<ItsoDashboardScreen> {
           ),
           IconButton(
             onPressed: () {
-              Navigator.pushReplacement(
+              Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+                MaterialPageRoute(builder: (_) => const StaffPortalScreen()),
+                (route) => false,
               );
             },
             icon: const Icon(Icons.logout),
