@@ -7,7 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'firebase_options.dart';
-import 'screens/startup_screen.dart';
+import 'screens/system/startup_screen.dart';
 import 'services/app_config_service.dart';
 import 'services/app_navigator.dart';
 import 'services/local_db_service.dart';

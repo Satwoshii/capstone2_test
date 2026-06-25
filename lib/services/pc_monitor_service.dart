@@ -6,7 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../models/hardware_status.dart';
 import '../models/pc_identity.dart';
-import '../screens/pc_broken_screen.dart';
+import '../screens/student/pc_broken_screen.dart';
 import 'app_config_service.dart';
 import 'app_navigator.dart';
 import 'local_db_service.dart';
