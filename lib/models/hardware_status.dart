@@ -2,6 +2,8 @@ class HardwareStatus {
   final bool cpuOk;
   final bool ramOk;
   final bool diskOk;
+  final bool storageHealthOk;
+  final bool storageCapacityOk;
   final bool networkOk;
   final bool keyboardOk;
   final bool mouseOk;
@@ -15,6 +17,8 @@ class HardwareStatus {
     required this.cpuOk,
     required this.ramOk,
     required this.diskOk,
+    required this.storageHealthOk,
+    required this.storageCapacityOk,
     required this.networkOk,
     required this.keyboardOk,
     required this.mouseOk,
@@ -27,52 +31,87 @@ class HardwareStatus {
 
   bool get hasIssue => failedComponents.isNotEmpty || issues.isNotEmpty;
 
-  // Compatibility getters used by PeripheralFormScreen.
   bool get mouseDetected => mouseOk;
   bool get keyboardDetected => keyboardOk;
   bool get monitorDetected => monitorOk;
   bool get networkDetected => networkOk;
-  bool get storageHealthy => diskOk;
+
+  bool get storageHealthy {
+    return diskOk && storageHealthOk && storageCapacityOk;
+  }
+
   List<String> get warnings => issues;
 
-  // Student-fixable/checkable items.
-  List<String> get peripheralIssues {
+  List<String> get minorIssues {
     final failed = <String>[];
 
     if (!mouseOk) failed.add('mouse');
     if (!keyboardOk) failed.add('keyboard');
     if (!monitorOk) failed.add('monitor');
-    if (!networkOk) failed.add('ethernet');
 
     return failed;
   }
 
-  // PC health items should be handled by ITSO only.
-  List<String> get pcHealthIssues {
+  List<String> get highIssues {
+    return [
+      if (!networkOk) 'ethernet',
+    ];
+  }
+
+  List<String> get criticalIssues {
     final failed = <String>[];
 
     if (!cpuOk) failed.add('cpu');
     if (!ramOk) failed.add('ram');
     if (!diskOk) failed.add('disk');
+    if (!storageHealthOk) failed.add('storage health');
+    if (!storageCapacityOk) failed.add('storage capacity');
 
     return failed;
   }
 
+  List<String> get peripheralIssues => [
+    ...minorIssues,
+    ...highIssues,
+  ];
+
+  List<String> get pcHealthIssues => criticalIssues;
+
   List<String> get failedComponents {
     return [
-      ...peripheralIssues,
-      ...pcHealthIssues,
+      ...minorIssues,
+      ...highIssues,
+      ...criticalIssues,
     ];
   }
 
   bool get hasPeripheralIssue => peripheralIssues.isNotEmpty;
-  bool get hasPcHealthIssue => pcHealthIssues.isNotEmpty;
+  bool get hasPcHealthIssue => criticalIssues.isNotEmpty;
+  bool get hasMinorIssue => minorIssues.isNotEmpty;
+  bool get hasHighIssue => highIssues.isNotEmpty;
+  bool get hasCriticalIssue => criticalIssues.isNotEmpty;
+  bool get hasBlockingIssue => hasHighIssue || hasCriticalIssue;
+
+  String get severity {
+    if (hasCriticalIssue) return 'critical';
+    if (hasHighIssue) return 'high';
+    if (hasMinorIssue) return 'minor';
+    return 'normal';
+  }
+
+  String get pcStatus {
+    if (hasBlockingIssue) return 'broken';
+    if (hasMinorIssue) return 'minor';
+    return 'online';
+  }
 
   Map<String, dynamic> toMap() {
     return {
       'cpuOk': cpuOk,
       'ramOk': ramOk,
       'diskOk': diskOk,
+      'storageHealthOk': storageHealthOk,
+      'storageCapacityOk': storageCapacityOk,
       'networkOk': networkOk,
       'keyboardOk': keyboardOk,
       'mouseOk': mouseOk,
@@ -83,7 +122,12 @@ class HardwareStatus {
       'issues': issues,
       'peripheralIssues': peripheralIssues,
       'pcHealthIssues': pcHealthIssues,
+      'minorIssues': minorIssues,
+      'highIssues': highIssues,
+      'criticalIssues': criticalIssues,
       'failedComponents': failedComponents,
+      'severity': severity,
+      'pcStatus': pcStatus,
     };
   }
 
@@ -92,6 +136,8 @@ class HardwareStatus {
       cpuOk: true,
       ramOk: true,
       diskOk: true,
+      storageHealthOk: true,
+      storageCapacityOk: true,
       networkOk: true,
       keyboardOk: true,
       mouseOk: true,

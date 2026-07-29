@@ -1,7 +1,7 @@
-name: hybrid_pc_monitoring_system
-description: Hybrid offline-first PC monitoring system capstone MVP.
+name: Syswatch
+description: Syswatch offline-first workstation monitoring and authentication.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.5.0

@@ -5,6 +5,7 @@ import '../services/app_config_service.dart';
 import '../services/auth_service.dart';
 import '../services/firebase_user_service.dart';
 import '../services/local_db_service.dart';
+import '../services/pc_monitor_service.dart';
 import '../services/sync_service.dart';
 import '../widgets/simple_app_bar.dart';
 import 'staff_portal_screen.dart';
@@ -102,6 +103,8 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       await SyncService.instance.syncPendingData();
 
       if (!mounted) return;
+
+      PcMonitorService.instance.beginStudentSession(user.email);
 
       Navigator.pushReplacement(
         context,

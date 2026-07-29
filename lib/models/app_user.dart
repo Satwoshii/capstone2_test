@@ -19,6 +19,21 @@ class AppUser {
     required this.active,
   });
 
+  AppUser copyWith({
+    String? passwordHash,
+    bool? active,
+  }) {
+    return AppUser(
+      uid: uid,
+      email: email,
+      displayName: displayName,
+      role: role,
+      studentId: studentId,
+      passwordHash: passwordHash ?? this.passwordHash,
+      active: active ?? this.active,
+    );
+  }
+
   Map<String, dynamic> toLocalMap() {
     return {
       'uid': uid,

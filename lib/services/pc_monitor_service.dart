@@ -6,11 +6,13 @@ import 'package:window_manager/window_manager.dart';
 
 import '../models/hardware_status.dart';
 import '../models/pc_identity.dart';
+import '../screens/student/minor_peripheral_warning_screen.dart';
 import '../screens/student/pc_broken_screen.dart';
 import 'app_config_service.dart';
 import 'app_navigator.dart';
 import 'local_db_service.dart';
 import 'sync_service.dart';
+import 'tray_service.dart';
 import 'windows_hardware_service.dart';
 
 class PcMonitorService {
@@ -20,147 +22,295 @@ class PcMonitorService {
 
   Timer? _timer;
   bool _checking = false;
-  bool _warningShown = false;
-  DateTime? _lastReportAt;
-  List<String> _lastIssues = [];
+  bool _started = false;
+  HardwareStatus _latestHardware = HardwareStatus.normal();
+  String _currentIssueSignature = '';
+  String _lastPresentedSignature = '';
+  Route<void>? _activeWarningRoute;
+  String? _activeStudentEmail;
 
-  void clearWarningState() {
-    _warningShown = false;
-    _lastIssues = [];
-    _lastReportAt = null;
+  HardwareStatus get latestHardware => _latestHardware;
+  String? get activeStudentEmail => _activeStudentEmail;
+  bool get hasActiveStudentSession => _activeStudentEmail != null;
+
+  void beginStudentSession(String studentEmail) {
+    _activeStudentEmail = studentEmail.trim().isEmpty ? null : studentEmail;
   }
 
-  Future<void> start() async {
-    await checkNow();
+  void endStudentSession() {
+    _activeStudentEmail = null;
+  }
+
+  // Kept for compatibility with old screens that may still call this method.
+  void clearWarningState() {
+    _lastPresentedSignature = '';
+  }
+
+  Future<void> start({bool checkImmediately = true}) async {
+    if (_started) return;
+    _started = true;
+
+    if (checkImmediately) {
+      await checkNow();
+    }
 
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) async {
-      await checkNow();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      checkNow();
     });
   }
 
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
+    _started = false;
   }
 
-  Future<void> checkNow() async {
-    if (_checking) return;
+  Future<HardwareStatus> checkNow({bool showWarnings = true}) async {
+    if (_checking) return _latestHardware;
 
     _checking = true;
 
     try {
       final pc = await AppConfigService.instance.getPcIdentity();
       final hardware = await WindowsHardwareService.checkHardware();
+      final previousIssues =
+          List<String>.from(_latestHardware.failedComponents);
+      final currentIssues = List<String>.from(hardware.failedComponents);
+      final previousSignature = _signature(previousIssues);
+      final currentSignature = _signature(currentIssues);
+      final stateChanged = previousSignature != currentSignature;
 
-      await LocalDbService.instance.upsertPcStatus(
-        pc: pc,
-        status: hardware.hasIssue ? 'broken' : 'online',
-        details: jsonEncode({
-          ...hardware.toMap(),
-          'checkedAt': DateTime.now().toIso8601String(),
-          'source': 'background_pc_monitor',
-        }),
-      );
+      final openLocalIssues =
+          await LocalDbService.instance.getOpenAutomaticFaultIssues(pc);
+      final recoveredIssues = {
+        ...previousIssues.where((issue) => !currentIssues.contains(issue)),
+        ...openLocalIssues.where((issue) => !currentIssues.contains(issue)),
+      }.toList();
+      final newIssues = currentIssues
+          .where((issue) => !previousIssues.contains(issue))
+          .toList();
+      final recordsChanged =
+          newIssues.isNotEmpty || recoveredIssues.isNotEmpty;
 
-      if (!hardware.hasIssue) {
-        _warningShown = false;
+      _latestHardware = hardware;
+      _currentIssueSignature = currentSignature;
+
+      if (pc.isConfigured) {
+        await LocalDbService.instance.upsertPcStatus(
+          pc: pc,
+          status: hardware.pcStatus,
+          details: jsonEncode({
+            ...hardware.toMap(),
+            'checkedAt': DateTime.now().toIso8601String(),
+            'source': 'global_pc_monitor',
+            'studentEmail': _activeStudentEmail,
+          }),
+          lastStudentEmail: _activeStudentEmail,
+        );
+      }
+
+      if (pc.isConfigured && newIssues.isNotEmpty) {
+        await _saveFault(
+          pc: pc,
+          issues: newIssues,
+          hardware: hardware,
+        );
+      }
+
+      if (pc.isConfigured && recoveredIssues.isNotEmpty) {
+        await _saveRecovery(pc: pc, recoveredIssues: recoveredIssues);
+      }
+
+      if (stateChanged) {
+        _lastPresentedSignature = '';
+        await _dismissActiveWarning();
+      }
+
+      if (currentIssues.isEmpty) {
+        if (stateChanged || recoveredIssues.isNotEmpty) {
+          _showRecoveryMessage();
+        }
+        if (stateChanged || recordsChanged) {
+          await SyncService.instance.syncPendingData();
+        }
+        return hardware;
+      }
+
+      if (showWarnings) {
+        await presentCurrentWarning();
+      }
+
+      if (stateChanged || recordsChanged) {
         await SyncService.instance.syncPendingData();
-        return;
       }
 
-      final issues = hardware.failedComponents.isNotEmpty
-          ? hardware.failedComponents
-          : hardware.issues;
-
-      await _saveFaultIfNeeded(
-        pc: pc,
-        issues: issues,
-        details: _detailsForIssue(hardware),
-      );
-
-      await SyncService.instance.syncPendingData();
-
-      if (!_warningShown) {
-        _warningShown = true;
-        await _showPcBrokenWarning(pc: pc, hardware: hardware);
-      }
+      return hardware;
     } catch (_) {
-      // Keep monitor alive even if a single scan fails.
+      // Keep the monitor alive if one Windows scan or local write fails.
+      return _latestHardware;
     } finally {
       _checking = false;
     }
   }
 
-  String _detailsForIssue(HardwareStatus hardware) {
-    if (hardware.hasPcHealthIssue) {
-      return 'PC health issue detected automatically. Student should use another workstation and contact ITSO. Issues: ${hardware.pcHealthIssues.join(', ')}';
+  Future<void> presentCurrentWarning() async {
+    if (_currentIssueSignature.isEmpty) return;
+    if (_lastPresentedSignature == _currentIssueSignature) return;
+
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) return;
+
+    await _bringWindowForward();
+
+    final pc = await AppConfigService.instance.getPcIdentity();
+    final hardware = _latestHardware;
+    final sessionActive = hasActiveStudentSession;
+
+    final Route<void> route;
+    if (hardware.hasBlockingIssue) {
+      route = MaterialPageRoute<void>(
+        builder: (_) => PcBrokenScreen(
+          pc: pc,
+          hardware: hardware,
+          sessionActive: sessionActive,
+        ),
+      );
+    } else {
+      route = MaterialPageRoute<void>(
+        builder: (_) => MinorPeripheralWarningScreen(
+          pc: pc,
+          hardware: hardware,
+          sessionActive: sessionActive,
+          onContinueInBackground: sessionActive
+              ? () => TrayService.instance.hideToTray()
+              : null,
+        ),
+      );
     }
 
-    return 'Peripheral issue detected automatically. Suggested checks may be shown to the student. Issues: ${hardware.peripheralIssues.join(', ')}';
+    _activeWarningRoute = route;
+    _lastPresentedSignature = _currentIssueSignature;
+
+    unawaited(
+      navigator.push(route).whenComplete(() {
+        if (identical(_activeWarningRoute, route)) {
+          _activeWarningRoute = null;
+        }
+      }),
+    );
   }
 
-  Future<void> _saveFaultIfNeeded({
+  Future<void> _saveFault({
     required PcIdentity pc,
     required List<String> issues,
-    required String details,
+    required HardwareStatus hardware,
   }) async {
-    if (issues.isEmpty) return;
+    for (final issue in issues) {
+      final alreadyOpen =
+          await LocalDbService.instance.hasOpenAutomaticFault(
+        pc: pc,
+        issue: issue,
+      );
+      if (alreadyOpen) continue;
 
-    final now = DateTime.now();
-    final sameIssue = _sameList(_lastIssues, issues);
-    final recentlyReported = _lastReportAt != null &&
-        now.difference(_lastReportAt!) < const Duration(minutes: 10);
+      await LocalDbService.instance.insertFaultReport(
+        pc: pc,
+        studentEmail: _activeStudentEmail,
+        issue: issue,
+        details: 'Automatically detected: $issue. '
+            'Overall workstation severity: ${hardware.severity}.',
+        severity: _severityFor([issue]),
+        source: 'background_pc_monitor',
+      );
+    }
+  }
 
-    if (sameIssue && recentlyReported) {
-      return;
+  Future<void> _saveRecovery({
+    required PcIdentity pc,
+    required List<String> recoveredIssues,
+  }) async {
+    for (final issue in recoveredIssues) {
+      await LocalDbService.instance.markAutomaticFaultRecovered(
+        pc: pc,
+        issue: issue,
+      );
     }
 
     await LocalDbService.instance.insertFaultReport(
       pc: pc,
-      issue: issues.join(', '),
-      details: details,
+      studentEmail: _activeStudentEmail,
+      issue: 'Recovered: ${recoveredIssues.join(', ')}',
+      details: 'Syswatch automatically detected that the device or component '
+          'is available again.',
+      severity: 'info',
+      source: 'automatic_recovery',
+      recovered: true,
     );
-
-    _lastIssues = List<String>.from(issues);
-    _lastReportAt = now;
   }
 
-  Future<void> _showPcBrokenWarning({
-    required PcIdentity pc,
-    required HardwareStatus hardware,
-  }) async {
+  String _severityFor(List<String> issues) {
+    if (issues.any(
+      (issue) =>
+          issue == 'cpu' ||
+          issue == 'ram' ||
+          issue == 'disk' ||
+          issue.startsWith('storage'),
+    )) {
+      return 'critical';
+    }
+    if (issues.contains('ethernet')) return 'high';
+    return 'minor';
+  }
+
+  String _signature(List<String> issues) {
+    final sorted = List<String>.from(issues)..sort();
+    return sorted.join('|');
+  }
+
+  Future<bool> _dismissActiveWarning() async {
+    final route = _activeWarningRoute;
+    final navigator = appNavigatorKey.currentState;
+    if (route == null || navigator == null || !route.isActive) {
+      _activeWarningRoute = null;
+      return false;
+    }
+
+    try {
+      if (route.isCurrent) {
+        navigator.pop();
+      } else {
+        navigator.removeRoute(route);
+      }
+      _activeWarningRoute = null;
+      return true;
+    } catch (_) {
+      _activeWarningRoute = null;
+      return false;
+    }
+  }
+
+  Future<void> _bringWindowForward() async {
     try {
       await windowManager.show();
       await windowManager.restore();
       await windowManager.setFullScreen(true);
       await windowManager.focus();
     } catch (_) {}
-
-    final navigator = appNavigatorKey.currentState;
-    if (navigator == null) return;
-
-    navigator.pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => PcBrokenScreen(
-          pc: pc,
-          hardware: hardware,
-        ),
-      ),
-      (route) => false,
-    );
   }
 
-  bool _sameList(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
+  void _showRecoveryMessage() {
+    final context = appNavigatorKey.currentContext;
+    if (context == null) return;
 
-    final sortedA = List<String>.from(a)..sort();
-    final sortedB = List<String>.from(b)..sort();
-
-    for (int i = 0; i < sortedA.length; i++) {
-      if (sortedA[i] != sortedB[i]) return false;
-    }
-
-    return true;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          hasActiveStudentSession
+              ? 'Hardware recovered. The current student session is still active.'
+              : 'Hardware recovered. This workstation is available again.',
+        ),
+      ),
+    );
   }
 }

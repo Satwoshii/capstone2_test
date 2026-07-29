@@ -10,11 +10,13 @@ import 'firebase_options.dart';
 import 'screens/system/startup_screen.dart';
 import 'services/app_config_service.dart';
 import 'services/app_navigator.dart';
+import 'services/global_shortcut_service.dart';
 import 'services/local_db_service.dart';
 import 'services/pc_monitor_service.dart';
 import 'services/startup_service.dart';
 import 'services/sync_service.dart';
 import 'services/tray_service.dart';
+import 'services/workstation_registry_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +34,7 @@ Future<void> main() async {
       size: Size(1100, 720),
       minimumSize: Size(900, 650),
       center: true,
-      title: 'Hybrid PC Monitoring System',
+      title: 'Syswatch',
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -40,16 +42,10 @@ Future<void> main() async {
       await windowManager.setFullScreen(true);
       await windowManager.show();
       await windowManager.focus();
-
-      // Kiosk-like behavior: prevent closing with the X button.
       await windowManager.setPreventClose(true);
     });
 
-    // System tray icon.
     await TrayService.instance.init();
-
-    // Auto-start on Windows boot.
-    // This may not work during flutter run, but should work better in release build.
     await StartupService.enableStartup();
   }
 
@@ -60,14 +56,20 @@ Future<void> main() async {
   await LocalDbService.instance.init();
   await AppConfigService.instance.init();
 
-  // Show UI first before syncing.
+  try {
+    await WorkstationRegistryService.instance
+        .restoreDevelopmentWorkstationSession();
+  } catch (_) {
+    // Previously enrolled workstations remain usable offline.
+  }
+
   runApp(const HybridPcMonitoringApp());
 
-  // Start sync in background.
+  await GlobalShortcutService.instance.init();
+
   SyncService.instance.start();
 
-  // Start PC monitoring even before student login.
-  PcMonitorService.instance.start();
+  PcMonitorService.instance.start(checkImmediately: false);
 }
 
 class HybridPcMonitoringApp extends StatelessWidget {
@@ -77,7 +79,7 @@ class HybridPcMonitoringApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: appNavigatorKey,
-      title: 'Hybrid PC Monitoring System',
+      title: 'Syswatch',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.blue,

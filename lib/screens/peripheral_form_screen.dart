@@ -103,8 +103,9 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
           description: _descriptionController.text.trim().isEmpty
               ? 'A problem was detected and confirmed during startup checking.'
               : _descriptionController.text.trim(),
-          severity: 'medium',
-          source: 'startup_hardware_check',
+          severity:
+              _failedComponents.contains('network') ? 'high' : 'minor',
+          source: 'peripheral_confirmation_form',
           detectedBySystem: true,
           createdAt: now,
         );

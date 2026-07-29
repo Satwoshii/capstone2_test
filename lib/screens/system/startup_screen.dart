@@ -1,12 +1,6 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
-import '../../services/app_config_service.dart';
-import '../../services/local_db_service.dart';
-import '../../services/sync_service.dart';
-import '../../services/windows_hardware_service.dart';
-import '../student/pc_broken_screen.dart';
+import '../../services/pc_monitor_service.dart';
 import '../student/student_login_screen.dart';
 
 class StartupScreen extends StatefulWidget {
@@ -17,7 +11,7 @@ class StartupScreen extends StatefulWidget {
 }
 
 class _StartupScreenState extends State<StartupScreen> {
-  String message = 'Starting system...';
+  String message = 'Starting Syswatch...';
 
   @override
   void initState() {
@@ -27,60 +21,25 @@ class _StartupScreenState extends State<StartupScreen> {
 
   Future<void> _boot() async {
     setState(() {
-      message = 'Checking workstation configuration...';
-    });
-
-    final pc = await AppConfigService.instance.getPcIdentity();
-
-    setState(() {
       message = 'Checking hardware and peripherals...';
     });
 
-    final hardware = await WindowsHardwareService.checkHardware();
-
-    await LocalDbService.instance.upsertPcStatus(
-      pc: pc,
-      status: hardware.hasIssue ? 'broken' : 'online',
-      details: jsonEncode(hardware.toMap()),
-    );
-
-    if (hardware.hasIssue) {
-      await LocalDbService.instance.insertFaultReport(
-        pc: pc,
-        issue: hardware.issues.first,
-        details: hardware.issues.join(', '),
-      );
-
-      await SyncService.instance.syncPendingData();
-
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PcBrokenScreen(
-            pc: pc,
-            hardware: hardware,
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    // Sync runs automatically in the background. Do not show a sync button to students.
-    SyncService.instance.syncPendingData();
+    // This is the initial scan of the one global monitor. It records status
+    // but waits until the login route exists before presenting a warning.
+    await PcMonitorService.instance.checkNow(showWarnings: false);
 
     if (!mounted) return;
 
-    // Final kiosk flow: students go directly to authentication.
-    // Staff/Admin screens are separated in the Staff Portal, not mixed into student UI.
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => const StudentLoginScreen(),
       ),
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PcMonitorService.instance.presentCurrentWarning();
+    });
   }
 
   @override

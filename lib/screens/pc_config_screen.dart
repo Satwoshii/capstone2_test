@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/pc_identity.dart';
 import '../services/app_config_service.dart';
 import '../widgets/simple_app_bar.dart';
 
@@ -36,7 +35,8 @@ class _PcConfigScreenState extends State<PcConfigScreen> {
   }
 
   Future<void> _save() async {
-    final identity = PcIdentity(
+    final current = await AppConfigService.instance.getPcIdentity();
+    final identity = current.copyWith(
       roomName: roomController.text.trim(),
       pcId: pcController.text.trim(),
     );

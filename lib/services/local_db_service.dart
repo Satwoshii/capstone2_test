@@ -28,8 +28,9 @@ class LocalDbService {
     _db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
       ),
     );
   }
@@ -62,6 +63,7 @@ class LocalDbService {
         email TEXT,
         displayName TEXT,
         role TEXT,
+        workstationId TEXT,
         roomName TEXT,
         pcId TEXT,
         loginTime TEXT,
@@ -74,6 +76,7 @@ class LocalDbService {
     await db.execute('''
       CREATE TABLE fault_reports (
         id TEXT PRIMARY KEY,
+        workstationId TEXT,
         roomName TEXT,
         pcId TEXT,
         studentEmail TEXT,
@@ -94,6 +97,7 @@ class LocalDbService {
       CREATE TABLE maintenance_logs (
         id TEXT PRIMARY KEY,
         faultReportId TEXT,
+        workstationId TEXT,
         roomName TEXT,
         pcId TEXT,
         technicianName TEXT,
@@ -106,14 +110,48 @@ class LocalDbService {
     await db.execute('''
       CREATE TABLE pc_status (
         id TEXT PRIMARY KEY,
+        workstationId TEXT,
         roomName TEXT,
         pcId TEXT,
         status TEXT,
         lastCheck TEXT,
+        lastStudentEmail TEXT,
         details TEXT,
         synced INTEGER NOT NULL
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await _addColumnIfMissing(db, 'login_logs', 'workstationId TEXT');
+      await _addColumnIfMissing(db, 'fault_reports', 'workstationId TEXT');
+      await _addColumnIfMissing(db, 'maintenance_logs', 'workstationId TEXT');
+      await _addColumnIfMissing(db, 'pc_status', 'workstationId TEXT');
+      await _addColumnIfMissing(db, 'pc_status', 'lastStudentEmail TEXT');
+    }
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String columnDefinition,
+  ) async {
+    final columnName = columnDefinition.split(' ').first;
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any(
+      (column) => column['name']?.toString() == columnName,
+    );
+
+    if (!exists) {
+      await db.execute(
+        'ALTER TABLE $table ADD COLUMN $columnDefinition',
+      );
+    }
   }
 
   Future<void> setConfig(String key, String value) async {
@@ -172,6 +210,7 @@ class LocalDbService {
       'email': user.email,
       'displayName': user.displayName,
       'role': user.role,
+      'workstationId': pc.workstationId,
       'roomName': pc.roomName,
       'pcId': pc.pcId,
       'loginTime': DateTime.now().toIso8601String(),
@@ -188,6 +227,8 @@ class LocalDbService {
     final loginTime = loginTimeValue is DateTime
         ? loginTimeValue.toIso8601String()
         : loginTimeValue?.toString() ?? DateTime.now().toIso8601String();
+    final workstationId =
+        data['workstationId'] ?? await getConfig('workstationId');
 
     await db.insert(
       'login_logs',
@@ -198,6 +239,7 @@ class LocalDbService {
         'email': data['studentEmail'] ?? data['email'],
         'displayName': data['displayName'] ?? data['studentEmail'] ?? '',
         'role': data['role'] ?? 'student',
+        'workstationId': workstationId,
         'roomName': data['room'] ?? data['roomName'],
         'pcId': data['pcNumber'] ?? data['pcId'],
         'loginTime': loginTime,
@@ -230,23 +272,29 @@ class LocalDbService {
     required PcIdentity pc,
     required String issue,
     required String details,
+    String? studentEmail,
+    String severity = 'medium',
+    String source = 'background_pc_monitor',
+    bool recovered = false,
   }) async {
     final id = const Uuid().v4();
+    final now = DateTime.now().toIso8601String();
 
     await db.insert('fault_reports', {
       'id': id,
+      'workstationId': pc.workstationId,
       'roomName': pc.roomName,
       'pcId': pc.pcId,
-      'studentEmail': null,
+      'studentEmail': studentEmail,
       'issue': issue,
       'details': details,
-      'severity': 'medium',
-      'source': 'startup_hardware_check',
+      'severity': severity,
+      'source': source,
       'detectedBySystem': 1,
-      'createdAt': DateTime.now().toIso8601String(),
-      'repaired': 0,
-      'repairedAt': null,
-      'technicianNotes': null,
+      'createdAt': now,
+      'repaired': recovered ? 1 : 0,
+      'repairedAt': recovered ? now : null,
+      'technicianNotes': recovered ? 'Automatically detected recovery.' : null,
       'synced': 0,
     });
 
@@ -258,11 +306,14 @@ class LocalDbService {
     final createdAt = createdAtValue is DateTime
         ? createdAtValue.toIso8601String()
         : createdAtValue?.toString() ?? DateTime.now().toIso8601String();
+    final workstationId =
+        data['workstationId'] ?? await getConfig('workstationId');
 
     await db.insert(
       'fault_reports',
       {
         'id': data['id'] ?? const Uuid().v4(),
+        'workstationId': workstationId,
         'roomName': data['room'] ?? data['roomName'],
         'pcId': data['pcNumber'] ?? data['pcId'],
         'studentEmail': data['studentEmail'],
@@ -281,6 +332,85 @@ class LocalDbService {
         'synced': 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<bool> hasOpenAutomaticFault({
+    required PcIdentity pc,
+    required String issue,
+  }) async {
+    final rows = await db.query(
+      'fault_reports',
+      columns: ['id'],
+      where: '''
+        roomName = ? AND
+        pcId = ? AND
+        issue = ? AND
+        source = ? AND
+        repaired = 0
+      ''',
+      whereArgs: [
+        pc.roomName,
+        pc.pcId,
+        issue,
+        'background_pc_monitor',
+      ],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<List<String>> getOpenAutomaticFaultIssues(PcIdentity pc) async {
+    final rows = await db.query(
+      'fault_reports',
+      distinct: true,
+      columns: ['issue'],
+      where: '''
+        roomName = ? AND
+        pcId = ? AND
+        source = ? AND
+        repaired = 0
+      ''',
+      whereArgs: [
+        pc.roomName,
+        pc.pcId,
+        'background_pc_monitor',
+      ],
+    );
+
+    return rows
+        .map((row) => row['issue']?.toString() ?? '')
+        .where((issue) => issue.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> markAutomaticFaultRecovered({
+    required PcIdentity pc,
+    required String issue,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+
+    await db.update(
+      'fault_reports',
+      {
+        'repaired': 1,
+        'repairedAt': now,
+        'technicianNotes': 'Automatically detected recovery.',
+        'synced': 0,
+      },
+      where: '''
+        roomName = ? AND
+        pcId = ? AND
+        issue = ? AND
+        source = ? AND
+        repaired = 0
+      ''',
+      whereArgs: [
+        pc.roomName,
+        pc.pcId,
+        issue,
+        'background_pc_monitor',
+      ],
     );
   }
 
@@ -316,6 +446,7 @@ class LocalDbService {
     await db.insert('maintenance_logs', {
       'id': const Uuid().v4(),
       'faultReportId': reportId,
+      'workstationId': report['workstationId'],
       'roomName': report['roomName'],
       'pcId': report['pcId'],
       'technicianName': technicianName,
@@ -329,22 +460,51 @@ class LocalDbService {
     required PcIdentity pc,
     required String status,
     required String details,
+    String? lastStudentEmail,
   }) async {
-    final id = '${pc.roomName}_${pc.pcId}'.replaceAll(' ', '_');
+    final id = pc.workstationId;
 
     await db.insert(
       'pc_status',
       {
         'id': id,
+        'workstationId': pc.workstationId,
         'roomName': pc.roomName,
         'pcId': pc.pcId,
         'status': status,
         'lastCheck': DateTime.now().toIso8601String(),
+        'lastStudentEmail': lastStudentEmail,
         'details': details,
         'synced': 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<String> getCurrentPcStatus(String workstationId) async {
+    final matchingRows = await db.query(
+      'pc_status',
+      columns: ['status'],
+      where: 'workstationId = ? OR id = ?',
+      whereArgs: [workstationId, workstationId],
+      orderBy: 'lastCheck DESC',
+      limit: 1,
+    );
+
+    if (matchingRows.isNotEmpty) {
+      return matchingRows.first['status']?.toString() ?? 'online';
+    }
+
+    // Supports status rows written before database version 2.
+    final latestRows = await db.query(
+      'pc_status',
+      columns: ['status'],
+      orderBy: 'lastCheck DESC',
+      limit: 1,
+    );
+
+    if (latestRows.isEmpty) return 'online';
+    return latestRows.first['status']?.toString() ?? 'online';
   }
 
   Future<List<String>> getSuggestions(String issueType) async {

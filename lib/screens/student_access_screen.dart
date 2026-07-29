@@ -1,17 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../models/app_user.dart';
-import '../models/issue_report.dart';
 import '../models/pc_identity.dart';
 import '../services/local_db_service.dart';
+import '../services/pc_monitor_service.dart';
 import '../services/sync_service.dart';
 import '../services/tray_service.dart';
-import '../services/windows_hardware_service.dart';
-import 'pc_broken_screen.dart';
 import 'student_login_screen.dart';
 
 class StudentAccessScreen extends StatefulWidget {
@@ -31,30 +28,19 @@ class StudentAccessScreen extends StatefulWidget {
 }
 
 class _StudentAccessScreenState extends State<StudentAccessScreen> {
-  final _uuid = const Uuid();
-
   Timer? _autoMinimizeTimer;
-  Timer? _monitorTimer;
-
-  bool _checking = false;
-  bool _dialogVisible = false;
-  DateTime? _lastReportAt;
   int _secondsLeft = 5;
 
   @override
   void initState() {
     super.initState();
-
+    PcMonitorService.instance.beginStudentSession(widget.user.email);
     _startAutoMinimizeTimer();
-
-    _monitorTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _backgroundHardwareCheck(),
-    );
   }
 
   void _startAutoMinimizeTimer() {
-    _autoMinimizeTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    _autoMinimizeTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (!mounted) return;
 
       setState(() {
@@ -74,84 +60,12 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
     } catch (_) {}
   }
 
-  Future<void> _backgroundHardwareCheck() async {
-    if (_checking || _dialogVisible) return;
-
-    _checking = true;
-
-    try {
-      final result = await WindowsHardwareService.checkHardware();
-      final issues = result.failedComponents;
-
-      if (issues.isEmpty || !mounted) return;
-
-      if (_lastReportAt != null &&
-          DateTime.now().difference(_lastReportAt!) <
-              const Duration(minutes: 10)) {
-        return;
-      }
-
-      _dialogVisible = true;
-
-      await _saveAutoReport(issues);
-
-      try {
-        await windowManager.show();
-        await windowManager.restore();
-        await windowManager.setFullScreen(true);
-        await windowManager.focus();
-      } catch (_) {}
-
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PcBrokenScreen(
-            pc: widget.pc,
-            hardware: result,
-          ),
-        ),
-      );
-    } finally {
-      _checking = false;
-      _dialogVisible = false;
-    }
-  }
-
-  Future<void> _saveAutoReport(List<String> issues) async {
-    final report = IssueReport(
-      id: _uuid.v4(),
-      studentEmail: widget.user.email,
-      pcNumber: widget.pc.pcId,
-      room: widget.pc.roomName,
-      issueType: issues.join(', '),
-      description: 'Hardware problem detected during an active student session.',
-      severity: issues.contains('storage') ? 'high' : 'medium',
-      source: 'background_hardware_check',
-      detectedBySystem: true,
-      createdAt: DateTime.now(),
-    );
-
-    await LocalDbService.instance.insertIssueReport(report.toLocalMap());
-
-    _lastReportAt = DateTime.now();
-
-    await SyncService.instance.syncPendingData();
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('The issue report was saved.')),
-    );
-  }
-
   Future<void> _logout(BuildContext context) async {
     _autoMinimizeTimer?.cancel();
-    _monitorTimer?.cancel();
 
     await LocalDbService.instance.logout(widget.loginLogId);
     await SyncService.instance.syncPendingData();
+    PcMonitorService.instance.endStudentSession();
 
     try {
       await windowManager.restore();
@@ -169,7 +83,6 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
   @override
   void dispose() {
     _autoMinimizeTimer?.cancel();
-    _monitorTimer?.cancel();
     super.dispose();
   }
 

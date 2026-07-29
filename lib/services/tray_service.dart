@@ -24,7 +24,7 @@ class TrayService with TrayListener {
           : 'assets/tray/app_icon.png',
     );
 
-    await trayManager.setToolTip('Hybrid PC Monitoring System');
+    await trayManager.setToolTip('Syswatch');
 
     await trayManager.setContextMenu(
       Menu(

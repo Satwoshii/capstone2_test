@@ -5,8 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import 'app_config_service.dart';
 import 'firebase_user_service.dart';
 import 'local_db_service.dart';
+import 'workstation_registry_service.dart';
 
 class SyncService {
   SyncService._();
@@ -14,31 +16,54 @@ class SyncService {
   static final SyncService instance = SyncService._();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   final ValueNotifier<int> pendingItems = ValueNotifier<int>(0);
+  final ValueNotifier<String?> lastError = ValueNotifier<String?>(null);
 
   Timer? _timer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
+  bool _started = false;
+  bool _syncing = false;
 
   Future<void> start() async {
+    if (_started) return;
+
+    _started = true;
+
     await refreshPendingCount();
-    await syncNow();
+    unawaited(syncNow());
 
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) async {
-      await refreshPendingCount();
-      await syncNow();
-    });
+    _timer = Timer.periodic(
+      const Duration(seconds: 20),
+          (_) async {
+        await refreshPendingCount();
+        await syncNow();
+      },
+    );
+
+    await _connectivitySubscription?.cancel();
+
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((results) {
+          if (!results.contains(ConnectivityResult.none)) {
+            unawaited(syncNow());
+          }
+        });
   }
 
   Future<bool> hasInternet() async {
     try {
-      final result = await Connectivity().checkConnectivity();
+      final results = await Connectivity().checkConnectivity();
 
-      if (result.contains(ConnectivityResult.none)) {
+      if (results.contains(ConnectivityResult.none)) {
         return false;
       }
 
-      final lookup = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
+      final lookup = await InternetAddress.lookup('google.com').timeout(
+        const Duration(seconds: 3),
+      );
 
       return lookup.isNotEmpty && lookup.first.rawAddress.isNotEmpty;
     } catch (_) {
@@ -47,13 +72,21 @@ class SyncService {
   }
 
   Future<int> refreshPendingCount() async {
-    final loginLogs =
-    await LocalDbService.instance.getUnsyncedRows('login_logs');
-    final faultReports =
-    await LocalDbService.instance.getUnsyncedRows('fault_reports');
-    final maintenanceLogs =
-    await LocalDbService.instance.getUnsyncedRows('maintenance_logs');
-    final pcStatus = await LocalDbService.instance.getUnsyncedRows('pc_status');
+    final loginLogs = await LocalDbService.instance.getUnsyncedRows(
+      'login_logs',
+    );
+
+    final faultReports = await LocalDbService.instance.getUnsyncedRows(
+      'fault_reports',
+    );
+
+    final maintenanceLogs = await LocalDbService.instance.getUnsyncedRows(
+      'maintenance_logs',
+    );
+
+    final pcStatus = await LocalDbService.instance.getUnsyncedRows(
+      'pc_status',
+    );
 
     final count = loginLogs.length +
         faultReports.length +
@@ -61,6 +94,7 @@ class SyncService {
         pcStatus.length;
 
     pendingItems.value = count;
+
     return count;
   }
 
@@ -69,15 +103,20 @@ class SyncService {
   }
 
   Future<void> syncNow() async {
-    final online = await hasInternet();
+    if (_syncing) return;
 
-    if (!online) {
-      await refreshPendingCount();
-      return;
-    }
+    _syncing = true;
 
     try {
-      await FirebaseUserService.downloadUsersToSQLite();
+      final online = await hasInternet();
+
+      if (!online) {
+        await refreshPendingCount();
+        return;
+      }
+
+      await WorkstationRegistryService.instance
+          .ensureDevelopmentWorkstationSession();
 
       await _syncTable(
         localTable: 'login_logs',
@@ -99,10 +138,40 @@ class SyncService {
         firestoreCollection: 'pc_status',
       );
 
-      await seedDefaultRoomsAndPcs();
+      final pc = await AppConfigService.instance.getPcIdentity();
+
+      final registrationConfirmed =
+      await AppConfigService.instance.isRegistrationConfirmed();
+
+      if (pc.isConfigured && registrationConfirmed) {
+        final status =
+        await LocalDbService.instance.getCurrentPcStatus(
+          pc.workstationId,
+        );
+
+        await WorkstationRegistryService.instance.updateHeartbeat(
+          pc,
+          status,
+        );
+      }
+
+      String? refreshError;
+
+      try {
+        await FirebaseUserService.downloadUsersToSQLite();
+      } catch (error) {
+        refreshError = 'Student account refresh delayed: $error';
+      }
+
+      lastError.value = refreshError;
+
       await refreshPendingCount();
-    } catch (_) {
+    } catch (error) {
+      lastError.value = error.toString();
+
       await refreshPendingCount();
+    } finally {
+      _syncing = false;
     }
   }
 
@@ -110,49 +179,116 @@ class SyncService {
     required String localTable,
     required String firestoreCollection,
   }) async {
-    final rows = await LocalDbService.instance.getUnsyncedRows(localTable);
+    final rows = await LocalDbService.instance.getUnsyncedRows(
+      localTable,
+    );
 
     for (final row in rows) {
       final id = row['id'].toString();
       final data = Map<String, dynamic>.from(row);
+
       data.remove('synced');
 
       await _firestore
           .collection(firestoreCollection)
           .doc(id)
-          .set(data, SetOptions(merge: true));
+          .set(
+        data,
+        SetOptions(merge: true),
+      );
 
-      await LocalDbService.instance.markSynced(localTable, id);
+      await LocalDbService.instance.markSynced(
+        localTable,
+        id,
+      );
     }
   }
 
   Future<void> seedDefaultRoomsAndPcs() async {
-    final rooms = ['Lab 1', 'Lab 2', 'Lab 3'];
+    const rooms = [
+      '706',
+      '707',
+      '708',
+      '709',
+      '710',
+      '723',
+    ];
+
+    const pcCount = 40;
+
+    final batch = _firestore.batch();
 
     for (final room in rooms) {
-      await _firestore.collection('rooms').doc(room).set({
-        'roomName': room,
-        'active': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      final roomReference = _firestore.collection('rooms').doc(room);
 
-      for (int i = 1; i <= 3; i++) {
-        final pcId = 'PC-${i.toString().padLeft(2, '0')}';
-
-        await _firestore.collection('pcs').doc('${room}_$pcId').set({
+      batch.set(
+        roomReference,
+        {
           'roomName': room,
-          'pcId': pcId,
-          'status': 'unknown',
+          'capacity': pcCount,
+          'pcCount': pcCount,
           'active': true,
           'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        },
+        SetOptions(merge: true),
+      );
+
+      for (int number = 1; number <= pcCount; number++) {
+        final pcId = 'PC-${number.toString().padLeft(2, '0')}';
+        final pcDocumentId = '${room}_$pcId';
+
+        final pcReference = _firestore
+            .collection('pcs')
+            .doc(pcDocumentId);
+
+        batch.set(
+          pcReference,
+          {
+            'roomName': room,
+            'room': room,
+            'pcId': pcId,
+            'pc': pcId,
+            'code': pcDocumentId,
+            'status': 'unknown',
+            'active': true,
+            'workstationId': null,
+            'lastStudentEmail': null,
+            'lastCheck': null,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
       }
     }
 
-    await _firestore.collection('system_config').doc('default').set({
-      'appName': 'Hybrid PC Monitoring System',
-      'offlineFirst': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final systemConfigReference = _firestore
+        .collection('system_config')
+        .doc('default');
+
+    batch.set(
+      systemConfigReference,
+      {
+        'appName': 'Syswatch',
+        'offlineFirst': true,
+        'roomCount': rooms.length,
+        'pcCountPerRoom': pcCount,
+        'totalPcCount': rooms.length * pcCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    await batch.commit();
+  }
+
+  Future<void> stop() async {
+    _timer?.cancel();
+    _timer = null;
+
+    await _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
+
+    _started = false;
   }
 }

@@ -1,181 +1,37 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../../models/hardware_status.dart';
 import '../../models/pc_identity.dart';
-import '../../services/app_config_service.dart';
-import '../../services/local_db_service.dart';
-import '../../services/pc_monitor_service.dart';
-import '../../services/sync_service.dart';
-import '../../services/windows_hardware_service.dart';
 import '../staff/pc_config_admin_login_screen.dart';
-import 'student_login_screen.dart';
 
-class PcBrokenScreen extends StatefulWidget {
+class PcBrokenScreen extends StatelessWidget {
   final PcIdentity pc;
   final HardwareStatus hardware;
+  final bool sessionActive;
 
   const PcBrokenScreen({
     super.key,
     required this.pc,
     required this.hardware,
+    this.sessionActive = false,
   });
 
-  @override
-  State<PcBrokenScreen> createState() => _PcBrokenScreenState();
-}
-
-class _PcBrokenScreenState extends State<PcBrokenScreen> {
-  late HardwareStatus hardware;
-  Timer? _autoRecheckTimer;
-  bool checking = false;
-  int secondsUntilNextCheck = 5;
-
-  @override
-  void initState() {
-    super.initState();
-    hardware = widget.hardware;
-    _startAutoRecheck();
-  }
-
-  void _startAutoRecheck() {
-    _autoRecheckTimer?.cancel();
-    _autoRecheckTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-
-      setState(() {
-        secondsUntilNextCheck--;
-      });
-
-      if (secondsUntilNextCheck <= 0) {
-        secondsUntilNextCheck = 5;
-        _recheckHardware();
-      }
-    });
-  }
-
   String get issueText {
-    final failed = hardware.failedComponents;
-
-    if (failed.isNotEmpty) {
-      return failed.join('\n');
-    }
-
-    if (hardware.issues.isNotEmpty) {
-      return hardware.issues.join('\n');
-    }
-
-    return 'Unknown issue';
+    final blocking = [
+      ...hardware.highIssues,
+      ...hardware.criticalIssues,
+    ];
+    if (blocking.isNotEmpty) return blocking.join('\n');
+    return hardware.issues.isEmpty ? 'Unknown issue' : hardware.issues.join('\n');
   }
 
-  List<String> get suggestions {
-    final tips = <String>[];
-
-    for (final issue in hardware.peripheralIssues) {
-      switch (issue) {
-        case 'mouse':
-          tips.add('Check if the mouse USB cable is properly connected.');
-          tips.add('Try plugging the mouse into another USB port.');
-          tips.add('Check if the mouse sensor light is on.');
-          break;
-
-        case 'keyboard':
-          tips.add('Check if the keyboard USB cable is properly connected.');
-          tips.add('Try plugging the keyboard into another USB port.');
-          tips.add('Check if Num Lock or Caps Lock responds.');
-          break;
-
-        case 'monitor':
-          tips.add('Check if the monitor power cable is connected.');
-          tips.add('Check the HDMI/VGA cable connection.');
-          tips.add('Make sure the monitor is turned on.');
-          break;
-
-        case 'ethernet':
-          tips.add('Check if the LAN cable is properly connected.');
-          tips.add('Check if the Ethernet port light is blinking.');
-          tips.add('Make sure the LAN cable is not damaged or loose.');
-          break;
-      }
-    }
-
-    return tips.toSet().toList();
-  }
-
-  bool get showSuggestions {
-    return hardware.hasPeripheralIssue && !hardware.hasPcHealthIssue;
-  }
-
-  String get warningMessage {
-    if (hardware.hasPcHealthIssue) {
-      return 'Please use another workstation and contact ITSO.';
-    }
-
-    return 'Try the suggested checks below. The system will automatically recheck. If the issue still continues, use another workstation and contact ITSO.';
-  }
-
-  Future<void> _recheckHardware() async {
-    if (checking) return;
-
-    setState(() {
-      checking = true;
-    });
-
-    try {
-      final pc = await AppConfigService.instance.getPcIdentity();
-      final newStatus = await WindowsHardwareService.checkHardware();
-
-      await LocalDbService.instance.upsertPcStatus(
-        pc: pc,
-        status: newStatus.hasIssue ? 'broken' : 'online',
-        details: jsonEncode({
-          ...newStatus.toMap(),
-          'checkedAt': DateTime.now().toIso8601String(),
-          'source': 'pc_broken_auto_recheck',
-        }),
-      );
-
-      await SyncService.instance.syncPendingData();
-
-      if (!mounted) return;
-
-      if (!newStatus.hasIssue) {
-        _autoRecheckTimer?.cancel();
-        PcMonitorService.instance.clearWarningState();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Problem fixed. PC is now available.'),
-          ),
-        );
-
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const StudentLoginScreen()),
-          (route) => false,
-        );
-
-        return;
-      }
-
-      setState(() {
-        hardware = newStatus;
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          checking = false;
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _autoRecheckTimer?.cancel();
-    super.dispose();
+  List<String> get ethernetSuggestions {
+    if (!hardware.highIssues.contains('ethernet')) return const [];
+    return const [
+      'Check whether the Ethernet/LAN cable is securely connected.',
+      'Check whether the Ethernet port link light is on or blinking.',
+      'Use another LAN cable or contact ITSO if the cable is damaged.',
+    ];
   }
 
   @override
@@ -228,63 +84,61 @@ class _PcBrokenScreenState extends State<PcBrokenScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Text(
-                    warningMessage,
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Please use another workstation and contact ITSO.',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 20),
+                    style: TextStyle(fontSize: 20),
                   ),
+                  if (sessionActive) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Your current student session has been preserved and '
+                      'will resume automatically after recovery.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
-                  Chip(
-                    avatar: checking
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh, size: 18),
+                  const Chip(
+                    avatar: Icon(Icons.monitor_heart, size: 18),
                     label: Text(
-                      checking
-                          ? 'Rechecking hardware...'
-                          : 'Auto recheck in $secondsUntilNextCheck second(s)',
+                      'Syswatch automatically rechecks every 10 seconds',
                     ),
                   ),
-                  if (showSuggestions && suggestions.isNotEmpty) ...[
-                    const SizedBox(height: 28),
+                  if (!hardware.hasCriticalIssue &&
+                      ethernetSuggestions.isNotEmpty) ...[
+                    const SizedBox(height: 24),
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Suggested Checks:',
+                        'Ethernet checks:',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    ...suggestions.map(
+                    ...ethernetSuggestions.map(
                       (tip) => ListTile(
                         dense: true,
-                        leading: const Icon(Icons.tips_and_updates),
-                        title: Text(
-                          tip,
-                          style: const TextStyle(fontSize: 16),
-                        ),
+                        leading: const Icon(Icons.cable),
+                        title: Text(tip),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 22),
                   Text(
-                    '${widget.pc.roomName} - ${widget.pc.pcId}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.black54,
-                    ),
+                    '${pc.roomName} - ${pc.pcId}',
+                    style: const TextStyle(color: Colors.black54),
                   ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
+                  const SizedBox(height: 22),
+                  OutlinedButton.icon(
                     onPressed: () {
-                      Navigator.pushReplacement(
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => const PcConfigAdminLoginScreen(),
