@@ -28,7 +28,7 @@ class LocalDbService {
     _db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -134,6 +134,20 @@ class LocalDbService {
       await _addColumnIfMissing(db, 'pc_status', 'workstationId TEXT');
       await _addColumnIfMissing(db, 'pc_status', 'lastStudentEmail TEXT');
     }
+
+    // Version 3 switches the application to the intranet API. No schema migration is
+    // required because the intranet server settings are stored in config.
+    if (oldVersion < 3) {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_users_student_id ON users(studentId)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_login_logs_synced ON login_logs(synced)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_fault_reports_synced ON fault_reports(synced)',
+      );
+    }
   }
 
   Future<void> _addColumnIfMissing(
@@ -185,10 +199,29 @@ class LocalDbService {
     );
   }
 
+  Future<void> upsertUsers(Iterable<AppUser> users) async {
+    final batch = db.batch();
+    for (final user in users) {
+      batch.insert(
+        'users',
+        user.toLocalMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<int> countCachedStudents() async {
+    final rows = await db.rawQuery(
+      "SELECT COUNT(*) AS total FROM users WHERE role = 'student' AND active = 1",
+    );
+    return (rows.first['total'] as num?)?.toInt() ?? 0;
+  }
+
   Future<AppUser?> findUserByStudentId(String studentId) async {
     final result = await db.query(
       'users',
-      where: 'studentId = ? AND active = 1',
+      where: 'UPPER(studentId) = UPPER(?) AND active = 1',
       whereArgs: [studentId],
       limit: 1,
     );

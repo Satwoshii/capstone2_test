@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../../services/app_config_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/firebase_user_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
 import '../../services/sync_service.dart';
@@ -25,7 +24,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
   bool loading = false;
   bool syncingUsers = true;
-  String syncMessage = 'Preparing offline login...';
+  String syncMessage = 'Connecting to the Syswatch intranet server...';
 
   @override
   void initState() {
@@ -33,9 +32,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     _autoSyncUsers();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        shortcutFocusNode.requestFocus();
-      }
+      if (mounted) shortcutFocusNode.requestFocus();
     });
   }
 
@@ -52,48 +49,55 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
     setState(() {
       syncingUsers = true;
-      syncMessage = 'Preparing offline login...';
+      syncMessage = 'Connecting to the Syswatch intranet server...';
     });
 
     try {
-      await FirebaseUserService.downloadUsersToSQLite();
+      final count = await AuthService.refreshOfflineStudents();
       await SyncService.instance.refreshPendingCount();
 
       if (!mounted) return;
-
       setState(() {
-        syncMessage = 'Offline login is ready.';
+        syncMessage = '$count student account(s) available for offline login.';
       });
     } catch (_) {
+      final count = await LocalDbService.instance.countCachedStudents();
       if (!mounted) return;
 
       setState(() {
-        syncMessage = 'Offline mode: using saved local accounts.';
+        syncMessage = count > 0
+            ? 'Intranet unavailable: using $count saved offline account(s).'
+            : 'Intranet unavailable: no offline accounts are saved yet.';
       });
     } finally {
       if (mounted) {
-        setState(() {
-          syncingUsers = false;
-        });
+        setState(() => syncingUsers = false);
         shortcutFocusNode.requestFocus();
       }
     }
   }
 
   Future<void> _login() async {
-    if (loading || syncingUsers) return;
+    if (loading) return;
 
-    setState(() {
-      loading = true;
-    });
+    setState(() => loading = true);
 
     try {
-      final user = await AuthService.loginOffline(
-        studentId: studentIdController.text.trim(),
-        password: passwordController.text.trim(),
-      );
-
       final pc = await AppConfigService.instance.getPcIdentity();
+      final registered =
+          await AppConfigService.instance.isRegistrationConfirmed();
+
+      if (!pc.isConfigured || !registered) {
+        throw Exception(
+          'This workstation is not registered. Ask an administrator to press '
+          'Ctrl + Shift + A and complete PC Configuration.',
+        );
+      }
+
+      final user = await AuthService.loginStudent(
+        studentId: studentIdController.text.trim(),
+        password: passwordController.text,
+      );
 
       final loginLogId = await LocalDbService.instance.insertLoginLog(
         user: user,
@@ -105,7 +109,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       if (!mounted) return;
 
       PcMonitorService.instance.beginStudentSession(user.email);
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -116,13 +119,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           ),
         ),
       );
-    } catch (e) {
-      _showError(e.toString());
+    } catch (error) {
+      _showError(error.toString());
     } finally {
       if (mounted) {
-        setState(() {
-          loading = false;
-        });
+        setState(() => loading = false);
         shortcutFocusNode.requestFocus();
       }
     }
@@ -131,7 +132,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message.replaceAll('Exception:', '').trim()),
+        content: Text(message.replaceFirst('Exception:', '').trim()),
       ),
     );
   }
@@ -141,9 +142,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       context,
       MaterialPageRoute(builder: (_) => const PcConfigAdminLoginScreen()),
     ).then((_) {
-      if (mounted) {
-        shortcutFocusNode.requestFocus();
-      }
+      if (mounted) shortcutFocusNode.requestFocus();
     });
   }
 
@@ -160,15 +159,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       focusNode: shortcutFocusNode,
       autofocus: true,
       onKeyEvent: (event) {
-        if (_isStaffShortcut(event)) {
-          _openPcConfigAdminLogin();
-        }
+        if (_isStaffShortcut(event)) _openPcConfigAdminLogin();
       },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () {
-          shortcutFocusNode.requestFocus();
-        },
+        onTap: shortcutFocusNode.requestFocus,
         child: PopScope(
           canPop: false,
           child: Scaffold(
@@ -183,7 +178,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.lock, size: 64),
+                        const Icon(Icons.lan, size: 64),
                         const SizedBox(height: 12),
                         const Text(
                           'Login Before Using PC',
@@ -200,9 +195,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                               const SizedBox(
                                 width: 14,
                                 height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               ),
                               const SizedBox(width: 8),
                             ],
@@ -243,30 +236,23 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton.icon(
-                            onPressed: loading || syncingUsers ? null : _login,
+                            onPressed: loading ? null : _login,
                             icon: const Icon(Icons.login),
                             label: Text(
-                              loading
-                                  ? 'Please wait...'
-                                  : syncingUsers
-                                      ? 'Preparing...'
-                                      : 'Login',
+                              loading ? 'Checking...' : 'Login',
                             ),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          'Syncing happens automatically in the background.',
-                          textAlign: TextAlign.center,
+                        TextButton.icon(
+                          onPressed: syncingUsers ? null : _autoSyncUsers,
+                          icon: const Icon(Icons.sync),
+                          label: const Text('Refresh intranet accounts'),
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Admin PC config shortcut: Ctrl + Shift + A',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.transparent,
-                          ),
+                          'Administrator shortcut: Ctrl + Shift + A',
+                          style: TextStyle(fontSize: 12),
                         ),
                       ],
                     ),

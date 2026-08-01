@@ -1,12 +1,10 @@
 import 'dart:io';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'firebase_options.dart';
 import 'screens/system/startup_screen.dart';
 import 'services/app_config_service.dart';
 import 'services/app_navigator.dart';
@@ -16,7 +14,6 @@ import 'services/pc_monitor_service.dart';
 import 'services/startup_service.dart';
 import 'services/sync_service.dart';
 import 'services/tray_service.dart';
-import 'services/workstation_registry_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,26 +46,13 @@ Future<void> main() async {
     await StartupService.enableStartup();
   }
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
   await LocalDbService.instance.init();
   await AppConfigService.instance.init();
-
-  try {
-    await WorkstationRegistryService.instance
-        .restoreDevelopmentWorkstationSession();
-  } catch (_) {
-    // Previously enrolled workstations remain usable offline.
-  }
 
   runApp(const HybridPcMonitoringApp());
 
   await GlobalShortcutService.instance.init();
-
-  SyncService.instance.start();
-
+  await SyncService.instance.start();
   PcMonitorService.instance.start(checkImmediately: false);
 }
 

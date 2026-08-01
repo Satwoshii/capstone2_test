@@ -1,18 +1,15 @@
-# Student PC App
+# Syswatch Student PC App
 
-This app remains the kiosk/startup app installed on laboratory computers.
+This `lib` folder uses an intranet-only architecture:
 
-Flow:
-- Startup -> Student Authentication
-- Student login and peripheral confirmation
-- One global hardware monitor before login, during sessions, and in the tray
-- Yellow minor warnings for keyboard, mouse, and monitor problems
-- Red PC BROKEN warnings for Ethernet and internal hardware problems
-- Automatic recovery without ending the current student session
-- Auto sync to Firebase
+- PHP/MariaDB central server over the laboratory LAN
+- SQLite cached student accounts for offline login
+- SQLite pending records with automatic local-server synchronization
+- Workstation registration and permanent workstation tokens
+- Local QR authentication sessions
+- Windows hardware and peripheral monitoring
+- Startup, tray operation, warnings, recovery, and Ctrl + Shift + A
 
-Hidden admin-only local configuration:
-- Press Ctrl + Shift + A on Student Authentication
-- Admin login opens PC Configuration only
-
-The ITSO/Admin management dashboard is now moved to the separate Staff Admin App.
+The Student PC app contains only student workstation functions plus the protected
+ITSO/Admin workstation-configuration login. Full management functions belong in
+the separate Staff app.

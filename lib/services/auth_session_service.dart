@@ -1,46 +1,72 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+
+import '../models/auth_session.dart';
+import 'api_client.dart';
+import 'api_endpoints.dart';
+import 'app_config_service.dart';
 
 class AuthSessionService {
   AuthSessionService._();
 
-  static final AuthSessionService instance =
-  AuthSessionService._();
+  static final AuthSessionService instance = AuthSessionService._();
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
-
-  Future<void> createSession({
+  Future<AuthSession> createSession({
     required String sessionId,
     required String pcNumber,
     required String room,
   }) async {
     final now = DateTime.now();
+    final pc = await AppConfigService.instance.getPcIdentity();
 
-    await _firestore
-        .collection('auth_sessions')
-        .doc(sessionId)
-        .set({
-      'sessionId': sessionId,
-      'pcNumber': pcNumber,
+    final response = await ApiClient.instance.postJson(
+      ApiEndpoints.createAuthSession,
+      body: {
+        'session_id': sessionId,
+        'workstation_id': pc.workstationId,
+        'pc_number': pcNumber,
+        'room': room,
+        'status': 'pending',
+        'created_at': now.toUtc().toIso8601String(),
+        'expires_at': now
+            .add(const Duration(minutes: 2))
+            .toUtc()
+            .toIso8601String(),
+      },
+    );
+
+    final sessionData = _extractSessionMap(response);
+    return AuthSession.fromJson({
+      'session_id': sessionId,
+      'pc_number': pcNumber,
       'room': room,
       'status': 'pending',
-      'studentEmail': null,
-      'studentUid': null,
-      'createdAt': Timestamp.fromDate(now),
-      'expiresAt': Timestamp.fromDate(
-        now.add(const Duration(minutes: 2)),
-      ),
+      'created_at': now.toUtc().toIso8601String(),
+      'expires_at': now
+          .add(const Duration(minutes: 2))
+          .toUtc()
+          .toIso8601String(),
+      ...sessionData,
     });
   }
 
-  Stream<DocumentSnapshot<Map<String, dynamic>>>
-  watchSession(
-      String sessionId,
-      ) {
-    return _firestore
-        .collection('auth_sessions')
-        .doc(sessionId)
-        .snapshots();
+  Stream<Map<String, dynamic>> watchSession(String sessionId) async* {
+    while (true) {
+      final response = await ApiClient.instance.getJson(
+        ApiEndpoints.authSessionStatus,
+        query: {'session_id': sessionId},
+      );
+      final session = _extractSessionMap(response);
+      yield session;
+
+      final status = session['status']?.toString().toLowerCase();
+      if (status == 'approved' ||
+          status == 'expired' ||
+          status == 'cancelled') {
+        return;
+      }
+
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
   }
 
   Future<void> approveSession({
@@ -48,106 +74,36 @@ class AuthSessionService {
     required String studentEmail,
     required String studentUid,
   }) async {
-    final reference = _firestore
-        .collection('auth_sessions')
-        .doc(sessionId);
-
-    final snapshot = await reference.get();
-    final data = snapshot.data();
-
-    if (data == null) {
-      throw StateError(
-        'Authentication session was not found.',
-      );
-    }
-
-    final status = data['status']?.toString();
-
-    if (status == 'approved') {
-      throw StateError(
-        'This authentication session was already approved.',
-      );
-    }
-
-    if (status == 'expired') {
-      throw StateError(
-        'This authentication session has expired.',
-      );
-    }
-
-    if (status == 'cancelled') {
-      throw StateError(
-        'This authentication session was cancelled.',
-      );
-    }
-
-    final expiresAt = data['expiresAt'];
-
-    if (expiresAt is Timestamp &&
-        expiresAt.toDate().isBefore(DateTime.now())) {
-      await reference.update({
-        'status': 'expired',
-        'expiredAt': FieldValue.serverTimestamp(),
-      });
-
-      throw StateError(
-        'The authentication QR code has expired.',
-      );
-    }
-
-    await reference.update({
-      'status': 'approved',
-      'studentEmail': studentEmail,
-      'studentUid': studentUid,
-      'approvedAt': FieldValue.serverTimestamp(),
-    });
+    await ApiClient.instance.postJson(
+      ApiEndpoints.approveAuthSession,
+      body: {
+        'session_id': sessionId,
+        'student_email': studentEmail,
+        'student_uid': studentUid,
+      },
+    );
   }
 
-  Future<void> cancelSession(
-      String sessionId,
-      ) async {
-    final reference = _firestore
-        .collection('auth_sessions')
-        .doc(sessionId);
-
-    final snapshot = await reference.get();
-
-    if (!snapshot.exists) return;
-
-    final status =
-    snapshot.data()?['status']?.toString();
-
-    if (status == 'approved' ||
-        status == 'expired' ||
-        status == 'cancelled') {
-      return;
-    }
-
-    await reference.update({
-      'status': 'cancelled',
-      'cancelledAt': FieldValue.serverTimestamp(),
-    });
+  Future<void> cancelSession(String sessionId) async {
+    await ApiClient.instance.postJson(
+      ApiEndpoints.cancelAuthSession,
+      body: {'session_id': sessionId},
+    );
   }
 
-  Future<void> expireSession(
-      String sessionId,
-      ) async {
-    final reference = _firestore
-        .collection('auth_sessions')
-        .doc(sessionId);
+  Future<void> expireSession(String sessionId) async {
+    await ApiClient.instance.postJson(
+      ApiEndpoints.expireAuthSession,
+      body: {'session_id': sessionId},
+    );
+  }
 
-    final snapshot = await reference.get();
-
-    if (!snapshot.exists) return;
-
-    final status =
-    snapshot.data()?['status']?.toString();
-
-    if (status != 'pending') return;
-
-    await reference.update({
-      'status': 'expired',
-      'expiredAt': FieldValue.serverTimestamp(),
-    });
+  Map<String, dynamic> _extractSessionMap(Map<String, dynamic> response) {
+    final raw = response['session'] ?? response['data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return response;
   }
 }

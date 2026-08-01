@@ -1,7 +1,7 @@
 name: Syswatch
-description: Syswatch offline-first workstation monitoring and authentication.
+description: Syswatch intranet-only workstation monitoring and authentication.
 publish_to: 'none'
-version: 1.1.0+2
+version: 2.0.0+3
 
 environment:
   sdk: ^3.5.0
@@ -9,10 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  firebase_core: ^4.0.0
-  firebase_auth: ^6.0.0
-  cloud_firestore: ^6.0.0
 
   sqflite_common_ffi: ^2.3.4
   path: ^1.9.0
