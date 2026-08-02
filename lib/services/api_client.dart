@@ -36,18 +36,22 @@ class ApiClient {
   static final ApiClient instance = ApiClient._();
 
   static const Duration _connectTimeout = Duration(seconds: 5);
-  static const Duration _requestTimeout = Duration(seconds: 12);
+  static const Duration _requestTimeout = Duration(seconds: 15);
 
   Future<Map<String, dynamic>> getJson(
     String endpoint, {
     Map<String, String>? query,
     bool includeWorkstationToken = true,
+    bool includeStudentToken = false,
+    Map<String, String>? headers,
   }) {
     return _request(
       method: 'GET',
       endpoint: endpoint,
       query: query,
       includeWorkstationToken: includeWorkstationToken,
+      includeStudentToken: includeStudentToken,
+      headers: headers,
     );
   }
 
@@ -56,6 +60,8 @@ class ApiClient {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     bool includeWorkstationToken = true,
+    bool includeStudentToken = false,
+    Map<String, String>? headers,
   }) {
     return _request(
       method: 'POST',
@@ -63,6 +69,8 @@ class ApiClient {
       body: body ?? const <String, dynamic>{},
       query: query,
       includeWorkstationToken: includeWorkstationToken,
+      includeStudentToken: includeStudentToken,
+      headers: headers,
     );
   }
 
@@ -72,6 +80,8 @@ class ApiClient {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     required bool includeWorkstationToken,
+    required bool includeStudentToken,
+    Map<String, String>? headers,
   }) async {
     final serverUrl = await AppConfigService.instance.getServerUrl();
     final uri = _buildUri(serverUrl, endpoint, query);
@@ -87,6 +97,25 @@ class ApiClient {
         final token = await AppConfigService.instance.getWorkstationToken();
         if (token.isNotEmpty) {
           request.headers.set('X-Workstation-Token', token);
+        }
+      }
+
+      if (includeStudentToken) {
+        final token = await AppConfigService.instance.getStudentApiToken();
+        if (token.isEmpty) {
+          throw const ApiRequestException(
+            statusCode: 401,
+            code: 'missing_student_session',
+            message: 'Log in online before using ITSO Support Chat.',
+          );
+        }
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+        request.headers.set('X-Syswatch-User-Token', token);
+      }
+
+      if (headers != null) {
+        for (final entry in headers.entries) {
+          request.headers.set(entry.key, entry.value);
         }
       }
 

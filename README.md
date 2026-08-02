@@ -1,16 +1,25 @@
 # Syswatch Student PC App
 
+## Version
+
+```text
+v2.4.1
+```
+
 ## Overview
 
 The **Syswatch Student PC App** is the workstation-side application installed on every laboratory computer.
 
-It has been converted from Firebase into an **intranet-only application** that uses:
+Syswatch has been converted into an **intranet-only computer laboratory authentication, hardware monitoring, reporting, and support system** using:
 
-- Flutter for Windows
+- Flutter Windows
 - PHP local API
 - MariaDB central database
 - SQLite local database
+- Apache/XAMPP
 - Laboratory LAN or private network
+
+Firebase and Firestore are no longer used by the active Student PC App.
 
 Public internet is not required.
 
@@ -21,161 +30,151 @@ Public internet is not required.
 The Student PC App:
 
 - Requires student authentication before normal PC use
-- Monitors the workstation and connected peripherals
+- Supports online login through PHP and MariaDB
+- Supports SQLite offline login
+- Monitors hardware and peripherals
 - Records the current and last known student
-- Stores records locally when the server is unavailable
-- Synchronizes pending records automatically
-- Continues monitoring while hidden or running in the system tray
+- Stores pending records locally
+- Synchronizes records automatically
+- Displays severity-based warning screens
+- Opens ITSO Support Chat only when the PC has an active issue
+- Continues running through Windows startup and the system tray
 
 ---
 
-## Added and Updated Features
+## Student Authentication
 
-### 1. Intranet student authentication
+### Online login
 
-Students now log in through the local PHP/MariaDB server.
-
-When the server is reachable:
+When the intranet server is reachable:
 
 1. The student enters a Student ID and password.
-2. The app sends the credentials to the local PHP API.
+2. The app sends the credentials to the PHP API.
 3. MariaDB verifies the account.
-4. The account is cached in SQLite for offline use.
-5. The login is recorded.
+4. The account is cached in SQLite.
+5. The student session begins.
+6. Login information is recorded.
 
-The app no longer uses Firebase Authentication.
+### Offline login
 
-### 2. SQLite offline login
+When the local server is unavailable:
 
-When the local server cannot be reached:
+1. The app checks SQLite.
+2. A previously cached student account can still log in.
+3. New records are saved locally as pending.
+4. The records synchronize when the server becomes available again.
 
-1. The app checks the SQLite database.
-2. A previously downloaded or authenticated student can still log in.
-3. New records remain pending locally.
-4. Synchronization resumes when the server returns.
+A student account must first be downloaded or authenticated while the server is online before offline login can work on that PC.
 
-A new student account must connect to the server at least once before offline login can work on that PC.
+---
 
-### 3. Automatic pending-record synchronization
+## Automatic Synchronization
 
-The app keeps unsent records in SQLite, including:
+The Student App stores unsent records in SQLite when the server is unavailable.
 
-- Login logs
-- Logout logs
-- Student reports
-- Fault reports
-- Peripheral reports
+Examples include:
+
+- Login records
+- Logout records
+- Student issue reports
 - PC health reports
+- Peripheral reports
+- Hardware fault reports
 - Session records
 - Workstation status
+- Pending chat messages
 
-When the server becomes available again:
+When the server reconnects:
 
-1. The app detects the server.
-2. Pending records are uploaded automatically.
-3. MariaDB saves the records.
-4. SQLite marks each successful record as synchronized.
+1. The app detects the intranet server.
+2. Pending records are uploaded through the PHP API.
+3. MariaDB stores the records.
+4. SQLite marks successful records as synchronized.
 
 Students do not need to press a manual Sync button.
 
-### 4. Configurable server address
+---
 
-The local server address can be changed through the protected PC configuration screen.
-
-Use this when XAMPP is on the same computer:
-
-```text
-http://127.0.0.1/syswatch_api
-```
-
-Use the server PC's LAN address from another computer:
-
-```text
-http://192.168.1.10/syswatch_api
-```
-
-For the VirtualBox host-only test used during development:
-
-```text
-http://192.168.56.1/syswatch_api
-```
-
-### 5. Workstation identity and token
+## Workstation Identity
 
 Each Student PC has:
 
-- Permanent workstation ID
-- Permanent workstation token
+- Configurable server URL
 - Room assignment
 - PC ID
-- Configured server address
+- Permanent workstation ID
+- Permanent workstation token
 
 Example:
 
 ```text
+Server: http://192.168.1.10/syswatch_api
 Room: 706
-PC ID: PC-01
+PC ID: PC-03
 Workstation ID: WS-XXXXXXXX
 ```
 
-The workstation token verifies that requests came from the registered PC.
+The workstation token verifies requests from the registered PC.
 
-### 6. Duplicate PC assignment prevention
+---
 
-Two computers cannot use the same room and PC ID.
+## Duplicate PC Assignment Prevention
+
+Syswatch prevents two computers from registering the same room and PC ID.
 
 Example:
 
 ```text
-VM 1: 706 / PC-01
-VM 2: 706 / PC-01
+PC 1: 706 / PC-03
+PC 2: 706 / PC-03
 ```
 
 The second registration is rejected.
 
-VM 2 must use another PC ID:
+The second computer must use another PC ID, such as:
 
 ```text
-706 / PC-02
+706 / PC-04
 ```
 
-### 7. Local QR authentication sessions
+---
 
-QR sessions were converted from Firestore to the local PHP API.
+## Hardware and Peripheral Monitoring
 
-The Student PC App can:
-
-- Create a local QR session
-- Display a QR code
-- Check the local server for approval
-- Handle expiration
-- Handle cancellation
-
-The phone authentication app must also use the same PHP API for complete intranet QR authentication.
-
-### 8. Continuous monitoring
-
-The app continues monitoring:
+The Student App monitors:
 
 - Keyboard
 - Mouse
 - Monitor
-- Ethernet or LAN
+- Ethernet or LAN connection
 - CPU
 - RAM
 - Disk
 - Storage health
 
+Students can also report issues that may not be detected automatically:
+
+- Dead pixels
+- Flickering monitor
+- Damaged keyboard keys
+- Mouse button problems
+- Loose or damaged cables
+- Visible physical damage
+- Applications that do not open
+- Other software problems
+
 Monitoring can continue:
 
-- Before student login
-- During the student session
-- While hidden
-- While running in the system tray
+- Before login
+- During an active session
+- While the app is hidden
+- While the app is running in the system tray
 
-### 9. Severity behavior
+---
 
-#### Minor problems
+## Warning Severity
+
+### Minor problems
 
 Examples:
 
@@ -188,9 +187,9 @@ Behavior:
 - Yellow warning
 - Student remains logged in
 - Monitoring continues
-- The app checks again automatically
+- Syswatch automatically checks again
 
-#### High-severity problem
+### High-severity problems
 
 Example:
 
@@ -200,37 +199,140 @@ Behavior:
 
 - Red warning or `PC BROKEN` screen
 - High-severity report is recorded
-- The app checks again after reconnection
+- Syswatch checks again after reconnection
 
-#### Critical problems
+### Critical problems
 
 Examples:
 
-- CPU problem
-- RAM problem
-- Disk problem
-- Storage-health problem
+- CPU issue
+- RAM issue
+- Disk issue
+- Storage-health issue
 
 Behavior:
 
 - Red `PC BROKEN` warning
 - Critical report is recorded
 - The Admin App can review the issue
+- ITSO Support Chat becomes available after the issue is synchronized
 
-### 10. Automatic recovery
+---
 
-When a peripheral or connection is restored:
+## Automatic Recovery
+
+When a disconnected device or connection is restored:
 
 1. Syswatch checks the device again.
-2. The warning is cleared.
-3. The session continues.
+2. The warning is cleared when recovery is confirmed.
+3. The student session continues.
 4. The updated status is recorded.
 
-The student does not need to log in again for a recoverable minor issue.
+The student does not need to log in again for a recoverable issue.
 
-### 11. Startup and tray operation
+---
 
-The Student PC App preserves:
+## Issue-Gated ITSO Support Chat
+
+The ITSO Support Chat is **not always available**.
+
+The chat is enabled only after Syswatch has created an active unresolved issue for the current workstation.
+
+```text
+No active issue
+→ Chat disabled
+
+Issue detected or reported
+→ Fault report created
+→ Chat enabled
+
+Issue resolved or closed
+→ Chat becomes read-only
+```
+
+### Chat can open after
+
+- Automatically detected hardware or peripheral issue
+- Student-submitted hardware issue
+- Student-submitted peripheral issue
+- Student-submitted network issue
+- Student-submitted software issue
+- Student-submitted visible-damage report
+
+### Student chat features
+
+The student can:
+
+- Open a conversation linked to the active issue
+- Send text messages to ITSO Support
+- View Admin replies
+- View message timestamps
+- View unread-message status
+- See the room, PC, issue type, and severity
+- Continue the conversation while the issue remains active
+
+The student cannot:
+
+- Start a chat without an active issue
+- View another student's chat
+- Change issue severity
+- Mark the issue as repaired
+- Delete Admin replies
+
+### Chat states
+
+```text
+ITSO Support unavailable
+```
+
+The issue has not reached the server yet, no active issue exists, or the server is unavailable.
+
+```text
+Chat with ITSO Support
+```
+
+The issue exists in MariaDB and is active.
+
+```text
+Issue resolved — View conversation
+```
+
+The issue has been resolved and the chat is read-only.
+
+### Chat record relationship
+
+Each chat conversation is linked to:
+
+- Fault report
+- Student account
+- Workstation
+- Room
+- PC ID
+- Student session
+- Assigned Admin
+- Issue status
+
+---
+
+## Local QR Authentication Sessions
+
+QR sessions were converted from Firestore to the local PHP API.
+
+The Student App can:
+
+- Create a local QR session
+- Display a QR code
+- Check the local server for approval
+- Handle expiration
+- Handle cancellation
+
+The phone authentication app must also use the PHP API for full intranet QR authentication.
+
+---
+
+## Startup, Tray, and Protected Configuration
+
+The Student App includes:
 
 - Windows startup support
 - Blocking login screen
@@ -246,74 +348,33 @@ The Admin shortcut is:
 Ctrl + Shift + A
 ```
 
-### 12. Student reporting
+This shortcut opens Admin authentication and workstation configuration.
 
-Students can:
-
-- Confirm keyboard status
-- Confirm mouse status
-- Confirm monitor status
-- Confirm Ethernet status
-- Report visible physical damage
-- Report software issues
-- Add comments about workstation problems
-
-Students cannot:
-
-- Create accounts
-- Manage rooms
-- View all reports
-- Manage repairs
-- Change workstation settings without Admin authentication
+Students cannot change the server address, room, PC ID, or workstation identity without Admin authorization.
 
 ---
 
-## How the Student App Works Now
+## Server Address
 
-### First-time workstation setup
+Use this when XAMPP is running on the same computer:
 
-1. Install the Student PC App.
-2. Start the application.
-3. Press `Ctrl + Shift + A`.
-4. Log in using an Admin account.
-5. Enter the server address.
-6. Enter the room.
-7. Enter the PC ID.
-8. Test the local server.
-9. Select **Save and Register Workstation**.
-10. The app stores the workstation ID and token locally.
+```text
+http://127.0.0.1/syswatch_api
+```
 
-### Normal student login
+Use the server PC's LAN address from another computer:
 
-1. The student enters a Student ID and password.
-2. The app checks whether the local server is available.
-3. If available, it authenticates through PHP/MariaDB.
-4. If unavailable, it checks SQLite.
-5. The app records the login.
-6. Monitoring continues.
-7. The student completes any required peripheral confirmation.
-8. The active session begins.
+```text
+http://192.168.1.10/syswatch_api
+```
 
-### During the session
+VirtualBox host-only development address:
 
-The app:
+```text
+http://192.168.56.1/syswatch_api
+```
 
-- Monitors hardware and peripherals
-- Sends heartbeat information
-- Records faults
-- Keeps the student associated with the workstation
-- Stores records locally if the server is unavailable
-- Synchronizes records after reconnection
-
-### Logout
-
-When the student logs out:
-
-1. The logout is recorded.
-2. The last-known-user record is updated.
-3. The app returns to the login screen.
-4. Monitoring continues.
-5. The next student must log in.
+Do not use `127.0.0.1` from a different PC because it refers to that PC itself.
 
 ---
 
@@ -321,52 +382,60 @@ When the student logs out:
 
 The Student installer:
 
-- Packages the complete Flutter Windows release folder
-- Installs Syswatch under Program Files
-- Creates shortcuts
+- Packages the complete Flutter Windows Release folder
+- Includes Flutter data, plugins, and DLL files
 - Includes the Microsoft Visual C++ x64 runtime
+- Creates a Start Menu shortcut
+- Can create a desktop shortcut
+- Can create a Windows startup shortcut
 - Prevents missing `MSVCP140.dll` and `VCRUNTIME140_1.dll` errors
-- Launches Syswatch after installation
 
-Expected installer name:
+Expected installer:
 
 ```text
-Syswatch_Student_Setup_v2.3.3.exe
+Syswatch_Student_Setup_v2.4.1.exe
 ```
 
 ---
 
 ## Testing Completed
 
-- API opened successfully from a VirtualBox VM
-- MariaDB health returned `database: online`
-- Host-only networking worked through `192.168.56.1`
-- Student installer compiled successfully
-- Student app installed and opened in the VM
-- Workstation configuration detected the server as online
-- Workstation ID and token were generated
+- Student App opens on a clean Windows VM
+- PHP API is reachable from the VM
+- MariaDB health returns online
+- VirtualBox host-only networking works
+- Workstation configuration detects the server
+- Permanent workstation ID and token are generated
+- Student installer includes the Visual C++ runtime
+- The updated Student App displays the ITSO Support control
+- The support control remains unavailable until an active issue exists on the server
 
 ---
 
 ## Remaining Tests
 
-- Online student login
-- Download student accounts to SQLite
-- Offline login
-- Pending-record synchronization
-- Duplicate workstation registration
+- Online Student login
+- SQLite offline login
+- Automatic pending-record synchronization
 - Multiple Student PCs
+- Duplicate workstation rejection
+- Full student-to-Admin chat exchange
+- Chat read/unread behavior
+- Chat after issue resolution
 - Full QR approval using the phone app
-- Real keyboard disconnection
-- Real mouse disconnection
-- Real monitor and Ethernet testing
-- Real startup and tray testing
+- Physical keyboard disconnection
+- Physical mouse disconnection
+- Physical monitor testing
+- Physical Ethernet removal
+- CPU, RAM, disk, and storage monitoring on real PCs
+- Windows startup and tray behavior on laboratory PCs
 
 ---
 
 ## Important Notes
 
-- Firebase data is not transferred automatically.
-- Existing Firebase accounts and reports require separate migration.
-- Do not delete the old Firebase project until MariaDB has been verified.
-- Physical computers are still required for final hardware tests.
+- Existing Firebase data is not transferred automatically.
+- Historical accounts, rooms, reports, and logs require separate migration.
+- The Student App installer does not install the PHP API or MariaDB schema.
+- The chat PHP files and corrected chat tables must be installed separately on the server.
+- Do not delete the old Firebase project until required records have been migrated.

@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import '../models/app_user.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
+import 'app_config_service.dart';
 import 'local_db_service.dart';
 
 class AuthService {
@@ -38,6 +39,11 @@ class AuthService {
         passwordHash: hashPassword(password),
       );
 
+      final apiToken = (response['api_token'] ?? '').toString();
+      if (apiToken.isEmpty) {
+        throw Exception('The server did not return a student access token.');
+      }
+
       if (!user.active) {
         throw Exception('This student account is inactive.');
       }
@@ -46,6 +52,11 @@ class AuthService {
       }
 
       await LocalDbService.instance.upsertUser(user);
+      await AppConfigService.instance.saveStudentApiSession(
+        user: user,
+        apiToken: apiToken,
+        expiresAt: response['token_expires_at']?.toString(),
+      );
       return user;
     } on ApiUnavailableException {
       return loginOffline(studentId: normalizedStudentId, password: password);
@@ -64,6 +75,8 @@ class AuthService {
     required String studentId,
     required String password,
   }) async {
+    // An offline login must not reuse another student's server token.
+    await AppConfigService.instance.clearStudentApiSession();
     final user = await LocalDbService.instance.findUserByStudentId(studentId);
 
     if (user == null) {

@@ -69,18 +69,16 @@ class AuthSessionService {
     }
   }
 
+  /// Used by the phone authentication app after student login.
   Future<void> approveSession({
     required String sessionId,
-    required String studentEmail,
-    required String studentUid,
+    required String apiToken,
   }) async {
     await ApiClient.instance.postJson(
       ApiEndpoints.approveAuthSession,
-      body: {
-        'session_id': sessionId,
-        'student_email': studentEmail,
-        'student_uid': studentUid,
-      },
+      body: {'session_id': sessionId},
+      includeWorkstationToken: false,
+      headers: {'Authorization': 'Bearer $apiToken'},
     );
   }
 

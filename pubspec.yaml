@@ -1,7 +1,7 @@
-name: Syswatch
+name: syswatch
 description: Syswatch intranet-only workstation monitoring and authentication.
 publish_to: 'none'
-version: 2.0.0+3
+version: 2.4.0+5
 
 environment:
   sdk: ^3.5.0
@@ -10,21 +10,23 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # SQLite local/offline storage
   sqflite_common_ffi: ^2.3.4
   path: ^1.9.0
   path_provider: ^2.1.5
-  connectivity_plus: ^7.0.0
 
+  # Password hashing, record IDs, and workstation tokens
   crypto: ^3.0.6
   uuid: ^4.5.1
 
+  # Windows desktop, tray, and startup behavior
   window_manager: ^0.5.0
   tray_manager: ^0.5.3
   launch_at_startup: ^0.5.1
   package_info_plus: ^8.3.1
 
+  # Student PC displays the QR; the phone app scans it
   qr_flutter: ^4.1.0
-  mobile_scanner: ^7.0.1
 
 dev_dependencies:
   flutter_test:

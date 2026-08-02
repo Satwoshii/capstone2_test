@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/hardware_status.dart';
 import '../../models/pc_identity.dart';
+import '../../widgets/issue_support_launcher.dart';
 import '../staff/pc_config_admin_login_screen.dart';
 
 class PcBrokenScreen extends StatelessWidget {
@@ -135,7 +136,11 @@ class PcBrokenScreen extends StatelessWidget {
                     '${pc.roomName} - ${pc.pcId}',
                     style: const TextStyle(color: Colors.black54),
                   ),
-                  const SizedBox(height: 22),
+                  if (sessionActive) ...[
+                    const IssueSupportLauncher(compact: true),
+                    const SizedBox(height: 16),
+                  ],
+                  const SizedBox(height: 6),
                   OutlinedButton.icon(
                     onPressed: () {
                       Navigator.push(

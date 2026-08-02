@@ -7,6 +7,7 @@ import 'api_endpoints.dart';
 import 'app_config_service.dart';
 import 'auth_service.dart';
 import 'local_db_service.dart';
+import 'support_chat_service.dart';
 import 'workstation_registry_service.dart';
 
 class SyncService {
@@ -66,10 +67,18 @@ class SyncService {
       'pc_status',
     );
 
+    final studentUid = await AppConfigService.instance.getStudentTokenUid();
+    final pendingChat = studentUid.isEmpty
+        ? const <Map<String, dynamic>>[]
+        : await LocalDbService.instance.getUnsyncedChatMessages(
+            senderUserUid: studentUid,
+          );
+
     final count = loginLogs.length +
         faultReports.length +
         maintenanceLogs.length +
-        pcStatus.length;
+        pcStatus.length +
+        pendingChat.length;
     pendingItems.value = count;
     return count;
   }
@@ -108,6 +117,12 @@ class SyncService {
           localTable: 'pc_status',
           recordType: 'pc_status',
         );
+
+        try {
+          await SupportChatService.instance.syncPendingMessages();
+        } catch (error) {
+          lastError.value = 'Pending support message sync delayed: $error';
+        }
 
         final status = await LocalDbService.instance.getCurrentPcStatus(
           pc.workstationId,

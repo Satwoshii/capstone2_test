@@ -28,7 +28,7 @@ class LocalDbService {
     _db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: 4,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -120,6 +120,43 @@ class LocalDbService {
         synced INTEGER NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE pending_chat_messages (
+        id TEXT PRIMARY KEY,
+        conversationId INTEGER NOT NULL,
+        faultReportId TEXT NOT NULL,
+        senderUserUid TEXT NOT NULL,
+        message TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        synced INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pending_chat_synced '
+      'ON pending_chat_messages(synced)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pending_chat_conversation '
+      'ON pending_chat_messages(conversationId, createdAt)',
+    );
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_users_student_id ON users(studentId)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_login_logs_synced ON login_logs(synced)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_fault_reports_synced ON fault_reports(synced)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_maintenance_logs_synced ON maintenance_logs(synced)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pc_status_synced ON pc_status(synced)',
+    );
   }
 
   Future<void> _onUpgrade(
@@ -146,6 +183,28 @@ class LocalDbService {
       );
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_fault_reports_synced ON fault_reports(synced)',
+      );
+    }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pending_chat_messages (
+          id TEXT PRIMARY KEY,
+          conversationId INTEGER NOT NULL,
+          faultReportId TEXT NOT NULL,
+          senderUserUid TEXT NOT NULL,
+          message TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          synced INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_pending_chat_synced '
+        'ON pending_chat_messages(synced)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_pending_chat_conversation '
+        'ON pending_chat_messages(conversationId, createdAt)',
       );
     }
   }
@@ -626,4 +685,99 @@ class LocalDbService {
   Future<List<Map<String, dynamic>>> getPcStatuses() {
     return db.query('pc_status', orderBy: 'lastCheck DESC');
   }
+
+  Future<List<Map<String, dynamic>>> getOpenFaultReports() {
+    return db.query(
+      'fault_reports',
+      where: 'repaired = ?',
+      whereArgs: [0],
+      orderBy: 'createdAt DESC',
+    );
+  }
+
+  Future<String> insertPendingChatMessage({
+    required int conversationId,
+    required String faultReportId,
+    required String senderUserUid,
+    required String message,
+  }) async {
+    final id = const Uuid().v4();
+    await db.insert(
+      'pending_chat_messages',
+      {
+        'id': id,
+        'conversationId': conversationId,
+        'faultReportId': faultReportId,
+        'senderUserUid': senderUserUid,
+        'message': message.trim(),
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'synced': 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+    return id;
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingChatMessages({
+    int? conversationId,
+    String? senderUserUid,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+
+    where.add('synced = ?');
+    args.add(0);
+    if (conversationId != null) {
+      where.add('conversationId = ?');
+      args.add(conversationId);
+    }
+    if (senderUserUid != null && senderUserUid.trim().isNotEmpty) {
+      where.add('senderUserUid = ?');
+      args.add(senderUserUid);
+    }
+
+    return db.query(
+      'pending_chat_messages',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'createdAt ASC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getUnsyncedChatMessages({
+    required String senderUserUid,
+  }) {
+    return db.query(
+      'pending_chat_messages',
+      where: 'synced = ? AND senderUserUid = ?',
+      whereArgs: [0, senderUserUid],
+      orderBy: 'createdAt ASC',
+    );
+  }
+
+  Future<void> deletePendingChatMessage(String id) async {
+    await db.delete(
+      'pending_chat_messages',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> markChatMessageSynced(String id) async {
+    await db.update(
+      'pending_chat_messages',
+      {'synced': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> deleteSyncedChatMessages() async {
+    await db.delete(
+      'pending_chat_messages',
+      where: 'synced = ?',
+      whereArgs: [1],
+    );
+  }
+
 }

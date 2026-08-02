@@ -5,10 +5,12 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../models/app_user.dart';
 import '../../models/pc_identity.dart';
+import '../../services/app_config_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
 import '../../services/sync_service.dart';
 import '../../services/tray_service.dart';
+import '../../widgets/issue_support_launcher.dart';
 import 'student_login_screen.dart';
 
 class StudentAccessScreen extends StatefulWidget {
@@ -65,6 +67,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
 
     await LocalDbService.instance.logout(widget.loginLogId);
     await SyncService.instance.syncPendingData();
+    await AppConfigService.instance.clearStudentApiSession();
     PcMonitorService.instance.endStudentSession();
 
     try {
@@ -154,6 +157,8 @@ class _StudentAccessScreenState extends State<StudentAccessScreen> {
                         );
                       },
                     ),
+                    const SizedBox(height: 18),
+                    const IssueSupportLauncher(),
                     const SizedBox(height: 24),
                     Wrap(
                       spacing: 12,

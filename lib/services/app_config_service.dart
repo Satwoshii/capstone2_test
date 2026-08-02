@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../models/app_user.dart';
 import '../models/pc_identity.dart';
 import 'local_db_service.dart';
 
@@ -111,6 +112,7 @@ class AppConfigService {
 
     if (existingNormalized.isNotEmpty && existingNormalized != normalized) {
       await setRegistrationConfirmed(false);
+      await clearStudentApiSession();
     }
   }
 
@@ -141,5 +143,54 @@ class AppConfigService {
   Future<bool> isRegistrationConfirmed() async {
     return await LocalDbService.instance.getConfig('workstationRegistered') ==
         'true';
+  }
+
+  Future<void> saveStudentApiSession({
+    required AppUser user,
+    required String apiToken,
+    String? expiresAt,
+  }) async {
+    await LocalDbService.instance.setConfig('studentApiToken', apiToken);
+    await LocalDbService.instance.setConfig('studentTokenUid', user.uid);
+    await LocalDbService.instance.setConfig(
+      'studentTokenExpiresAt',
+      expiresAt ?? '',
+    );
+  }
+
+  Future<String> getStudentApiToken() async {
+    final token = await LocalDbService.instance.getConfig('studentApiToken');
+    if (token == null || token.trim().isEmpty) return '';
+
+    final expiry = await getStudentTokenExpiresAt();
+    if (expiry != null && !expiry.isAfter(DateTime.now().toUtc())) {
+      await clearStudentApiSession();
+      return '';
+    }
+    return token;
+  }
+
+  Future<String> getStudentTokenUid() async {
+    return await LocalDbService.instance.getConfig('studentTokenUid') ?? '';
+  }
+
+  Future<DateTime?> getStudentTokenExpiresAt() async {
+    final value =
+        await LocalDbService.instance.getConfig('studentTokenExpiresAt');
+    if (value == null || value.trim().isEmpty) return null;
+    return DateTime.tryParse(value)?.toUtc();
+  }
+
+  Future<bool> hasValidStudentApiSession({String? expectedUid}) async {
+    final token = await getStudentApiToken();
+    if (token.isEmpty) return false;
+    if (expectedUid == null || expectedUid.trim().isEmpty) return true;
+    return await getStudentTokenUid() == expectedUid;
+  }
+
+  Future<void> clearStudentApiSession() async {
+    await LocalDbService.instance.setConfig('studentApiToken', '');
+    await LocalDbService.instance.setConfig('studentTokenUid', '');
+    await LocalDbService.instance.setConfig('studentTokenExpiresAt', '');
   }
 }

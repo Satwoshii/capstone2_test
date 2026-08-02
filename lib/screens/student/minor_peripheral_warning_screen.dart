@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/hardware_status.dart';
 import '../../models/pc_identity.dart';
+import '../../widgets/issue_support_launcher.dart';
 
 class MinorPeripheralWarningScreen extends StatelessWidget {
   final PcIdentity pc;
@@ -118,7 +119,11 @@ class MinorPeripheralWarningScreen extends StatelessWidget {
                     '${pc.roomName} - ${pc.pcId}',
                     style: const TextStyle(color: Colors.black54),
                   ),
-                  const SizedBox(height: 24),
+                  if (sessionActive) ...[
+                    const IssueSupportLauncher(compact: true),
+                    const SizedBox(height: 16),
+                  ],
+                  const SizedBox(height: 8),
                   FilledButton.icon(
                     onPressed: () => _continue(context),
                     icon: Icon(
