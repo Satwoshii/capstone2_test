@@ -18,7 +18,9 @@ class ApiEndpoints {
   static const String cancelAuthSession = 'auth_sessions/cancel.php';
   static const String expireAuthSession = 'auth_sessions/expire.php';
 
+  static const String supportConversations = 'chat/student_conversations.php';
   static const String supportActiveIssues = 'chat/student_active_issues.php';
+  static const String supportCreate = 'chat/student_create.php';
   static const String supportOpenConversation = 'chat/student_open.php';
   static const String supportMessages = 'chat/student_messages.php';
   static const String supportSend = 'chat/student_send.php';

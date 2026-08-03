@@ -2,12 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/support_issue.dart';
-import '../screens/student/support_chat_screen.dart';
+import '../screens/student/support_center_screen.dart';
 import '../services/app_config_service.dart';
-import '../services/local_db_service.dart';
 import '../services/support_chat_service.dart';
-import '../services/sync_service.dart';
 
 class IssueSupportLauncher extends StatefulWidget {
   final bool compact;
@@ -23,18 +20,15 @@ class IssueSupportLauncher extends StatefulWidget {
 
 class _IssueSupportLauncherState extends State<IssueSupportLauncher> {
   Timer? _timer;
-  List<SupportIssue> _issues = const [];
   bool _loading = true;
-  bool _opening = false;
-  bool _refreshing = false;
-  bool _localIssueWaitingForSync = false;
-  String? _error;
+  bool _available = false;
+  int _unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
     _refresh();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _refresh());
   }
 
   @override
@@ -44,121 +38,47 @@ class _IssueSupportLauncherState extends State<IssueSupportLauncher> {
   }
 
   Future<void> _refresh() async {
-    if (!mounted || _opening || _refreshing) return;
-    _refreshing = true;
-
     try {
       final hasSession =
           await AppConfigService.instance.hasValidStudentApiSession();
       if (!hasSession) {
-        final local = await LocalDbService.instance.getOpenFaultReports();
         if (!mounted) return;
         setState(() {
-          _issues = const [];
-          _localIssueWaitingForSync = local.isNotEmpty;
-          _error = 'Online student login is required for ITSO Support Chat.';
           _loading = false;
+          _available = false;
+          _unreadCount = 0;
         });
         return;
       }
 
-      await SyncService.instance.syncPendingData();
-      final issues = await SupportChatService.instance.listActiveIssues();
+      final conversations =
+          await SupportChatService.instance.listConversations();
       if (!mounted) return;
       setState(() {
-        _issues = issues;
-        _localIssueWaitingForSync = false;
-        _error = null;
         _loading = false;
-      });
-    } catch (error) {
-      final local = await LocalDbService.instance.getOpenFaultReports();
-      if (!mounted) return;
-      setState(() {
-        _issues = const [];
-        _localIssueWaitingForSync = local.isNotEmpty;
-        _error = error.toString();
-        _loading = false;
-      });
-    } finally {
-      _refreshing = false;
-    }
-  }
-
-  Future<void> _openIssue(SupportIssue selected) async {
-    if (_opening) return;
-    setState(() => _opening = true);
-
-    try {
-      final issue = selected.hasConversation
-          ? selected
-          : await SupportChatService.instance.openConversation(
-              selected.faultReportId,
-            );
-      if (!mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SupportChatScreen(issue: issue),
-        ),
-      );
-      await _refresh();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_cleanError(error))),
-      );
-    } finally {
-      if (mounted) setState(() => _opening = false);
-    }
-  }
-
-  Future<void> _chooseIssue() async {
-    if (_issues.isEmpty) return;
-    if (_issues.length == 1) {
-      await _openIssue(_issues.first);
-      return;
-    }
-
-    final selected = await showModalBottomSheet<SupportIssue>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.only(bottom: 16),
-            children: [
-              const ListTile(
-                title: Text(
-                  'Choose an active PC issue',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text('Each issue has its own support conversation.'),
-              ),
-              for (final issue in _issues)
-                ListTile(
-                  leading: CircleAvatar(
-                    child: Text(issue.severity.trim().isEmpty ? '?' : issue.severity.trim()[0].toUpperCase()),
-                  ),
-                  title: Text(issue.issue),
-                  subtitle: Text(
-                    '${issue.roomName} - ${issue.pcId}\n'
-                    '${issue.severity.toUpperCase()}',
-                  ),
-                  isThreeLine: true,
-                  trailing: issue.unreadCount > 0
-                      ? Badge(label: Text('${issue.unreadCount}'))
-                      : const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pop(context, issue),
-                ),
-            ],
-          ),
+        _available = true;
+        _unreadCount = conversations.fold<int>(
+          0,
+          (total, item) => total + item.unreadCount,
         );
-      },
-    );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _available = false;
+      });
+    }
+  }
 
-    if (selected != null) await _openIssue(selected);
+  Future<void> _openSupport() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SupportCenterScreen(),
+      ),
+    );
+    await _refresh();
   }
 
   @override
@@ -172,57 +92,40 @@ class _IssueSupportLauncherState extends State<IssueSupportLauncher> {
             )
           : const ListTile(
               leading: CircularProgressIndicator(strokeWidth: 2),
-              title: Text('Checking ITSO Support availability...'),
+              title: Text('Connecting to ITSO Support...'),
             );
     }
 
-    final unread = _issues.fold<int>(
-      0,
-      (total, issue) => total + issue.unreadCount,
-    );
-
-    if (_issues.isNotEmpty) {
-      return FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: Colors.blue.shade700,
-          foregroundColor: Colors.white,
-          padding: widget.compact
-              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-              : const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-        ),
-        onPressed: _opening ? null : _chooseIssue,
-        icon: _opening
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.support_agent),
-        label: Text(
-          unread > 0
-              ? 'Chat with ITSO Support ($unread new)'
-              : 'Chat with ITSO Support (${_issues.length} issue${_issues.length == 1 ? '' : 's'})',
+    if (!_available) {
+      return Tooltip(
+        message: 'Log in online and connect to the intranet server to use chat.',
+        child: OutlinedButton.icon(
+          onPressed: null,
+          icon: const Icon(Icons.support_agent),
+          label: Text(
+            widget.compact
+                ? 'ITSO Support offline'
+                : 'ITSO Support requires an online Student login',
+          ),
         ),
       );
     }
 
-    final message = _localIssueWaitingForSync
-        ? 'Issue saved locally. Chat will open after the issue synchronizes.'
-        : (_error != null
-            ? 'ITSO Support is unavailable until an active issue is online.'
-            : 'ITSO Support opens only when this PC has an active issue.');
-
-    return Tooltip(
-      message: _error == null ? message : '$message\n${_cleanError(_error!)}',
-      child: OutlinedButton.icon(
-        onPressed: null,
-        icon: const Icon(Icons.support_agent),
-        label: Text(widget.compact ? 'ITSO Support unavailable' : message),
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        backgroundColor: Colors.blue.shade700,
+        foregroundColor: Colors.white,
+        padding: widget.compact
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+            : const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+      ),
+      onPressed: _openSupport,
+      icon: const Icon(Icons.support_agent),
+      label: Text(
+        _unreadCount > 0
+            ? 'ITSO Support ($_unreadCount new)'
+            : 'Chat with ITSO Support',
       ),
     );
-  }
-
-  String _cleanError(Object error) {
-    return error.toString().replaceFirst('Exception:', '').trim();
   }
 }

@@ -11,18 +11,54 @@ class SupportChatService {
 
   static final SupportChatService instance = SupportChatService._();
 
+  Future<List<SupportIssue>> listConversations() async {
+    final response = await ApiClient.instance.getJson(
+      ApiEndpoints.supportConversations,
+      includeStudentToken: true,
+    );
+    return _mapIssues(response['conversations']);
+  }
+
   Future<List<SupportIssue>> listActiveIssues() async {
     final response = await ApiClient.instance.getJson(
       ApiEndpoints.supportActiveIssues,
       includeStudentToken: true,
     );
-    final raw = response['issues'];
-    if (raw is! List) return const <SupportIssue>[];
-    return raw.whereType<Map>().map((item) {
-      return SupportIssue.fromJson(
-        item.map((key, value) => MapEntry(key.toString(), value)),
-      );
-    }).toList();
+    return _mapIssues(response['issues']);
+  }
+
+  Future<SupportIssue> createConversation({
+    required String category,
+    required String subject,
+    required String message,
+    String? faultReportId,
+  }) async {
+    final cleanSubject = subject.trim();
+    final cleanMessage = message.trim();
+    if (cleanSubject.length < 3) {
+      throw Exception('Enter a subject with at least 3 characters.');
+    }
+    if (cleanMessage.isEmpty) {
+      throw Exception('Enter a message for ITSO Support.');
+    }
+
+    final response = await ApiClient.instance.postJson(
+      ApiEndpoints.supportCreate,
+      includeStudentToken: true,
+      body: {
+        'category': category.trim().toLowerCase(),
+        'subject': cleanSubject,
+        'message': cleanMessage,
+        'fault_report_id': faultReportId,
+      },
+    );
+    final raw = response['conversation'];
+    if (raw is! Map) {
+      throw Exception('The server did not return the support request.');
+    }
+    return SupportIssue.fromJson(
+      raw.map((key, value) => MapEntry(key.toString(), value)),
+    );
   }
 
   Future<SupportIssue> openConversation(String faultReportId) async {
@@ -31,7 +67,7 @@ class SupportChatService {
       includeStudentToken: true,
       body: {'fault_report_id': faultReportId},
     );
-    final raw = response['issue'];
+    final raw = response['conversation'] ?? response['issue'];
     if (raw is! Map) {
       throw Exception('The server did not return the support conversation.');
     }
@@ -78,21 +114,18 @@ class SupportChatService {
 
   Future<ChatMessage> sendMessage({
     required int conversationId,
-    required String faultReportId,
+    required String? faultReportId,
     required String senderUserUid,
     required String message,
   }) async {
     final clean = message.trim();
-    if (clean.isEmpty) {
-      throw Exception('Enter a message.');
-    }
-    if (clean.length > 4000) {
-      throw Exception('The message is too long.');
-    }
+    if (clean.isEmpty) throw Exception('Enter a message.');
+    if (clean.length > 4000) throw Exception('The message is too long.');
 
-    final clientMessageId = await LocalDbService.instance.insertPendingChatMessage(
+    final clientMessageId =
+        await LocalDbService.instance.insertPendingChatMessage(
       conversationId: conversationId,
-      faultReportId: faultReportId,
+      faultReportId: faultReportId ?? '',
       senderUserUid: senderUserUid,
       message: clean,
     );
@@ -117,7 +150,7 @@ class SupportChatService {
         );
       }
     } on ApiUnavailableException {
-      // Keep the local row pending. It will be sent by SyncService later.
+      // The local row remains pending and SyncService retries it later.
     } on ApiRequestException {
       await LocalDbService.instance.deletePendingChatMessage(clientMessageId);
       rethrow;
@@ -177,7 +210,7 @@ class SupportChatService {
         await LocalDbService.instance.markChatMessageSynced(id);
         synced++;
       } on ApiRequestException catch (error) {
-        if (error.code == 'issue_resolved' ||
+        if (error.code == 'conversation_closed' ||
             error.code == 'conversation_not_found') {
           await LocalDbService.instance.deletePendingChatMessage(id);
           continue;
@@ -190,6 +223,15 @@ class SupportChatService {
       await LocalDbService.instance.deleteSyncedChatMessages();
     }
     return synced;
+  }
+
+  List<SupportIssue> _mapIssues(dynamic raw) {
+    if (raw is! List) return const <SupportIssue>[];
+    return raw.whereType<Map>().map((item) {
+      return SupportIssue.fromJson(
+        item.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    }).toList();
   }
 
   int _toInt(dynamic value) {

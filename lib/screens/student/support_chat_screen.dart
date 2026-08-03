@@ -66,18 +66,17 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
         conversationId: _conversationId,
         currentStudentUid: _studentUid,
       );
-      final messages = snapshot.messages;
       await SupportChatService.instance.markRead(_conversationId);
       if (!mounted) return;
       final previousLength = _messages.length;
       setState(() {
-        _messages = messages;
+        _messages = snapshot.messages;
         _conversationStatus = snapshot.status;
         _canChat = snapshot.canChat;
         _error = null;
         _loading = false;
       });
-      if (scrollToBottom || messages.length != previousLength) {
+      if (scrollToBottom || snapshot.messages.length != previousLength) {
         _scrollAfterBuild();
       }
     } catch (error) {
@@ -154,9 +153,12 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.report_problem,
-                    color: _severityColor(widget.issue.severity),
+                  CircleAvatar(
+                    child: Icon(
+                      widget.issue.linkedFault
+                          ? Icons.report_problem
+                          : Icons.support_agent,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -164,13 +166,18 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.issue.issue,
+                          widget.issue.subject,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          '${widget.issue.roomName} - ${widget.issue.pcId} • '
-                          '${widget.issue.severity.toUpperCase()}',
+                          '${_categoryLabel(widget.issue.category)} • '
+                          '${widget.issue.roomName} - ${widget.issue.pcId}',
                         ),
+                        if (widget.issue.linkedFault)
+                          Text(
+                            'Linked issue: ${widget.issue.issue} '
+                            '(${widget.issue.severity.toUpperCase()})',
+                          ),
                       ],
                     ),
                   ),
@@ -202,7 +209,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 : _messages.isEmpty
                     ? const Center(
                         child: Text(
-                          'No messages yet. Describe the active PC issue to ITSO.',
+                          'Send a message to ITSO Support.',
                           textAlign: TextAlign.center,
                         ),
                       )
@@ -231,8 +238,8 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                       maxLength: 4000,
                       decoration: InputDecoration(
                         hintText: _canChat
-                            ? 'Describe the issue or reply to ITSO...'
-                            : 'This issue is resolved. The chat is read-only.',
+                            ? 'Type your message...'
+                            : 'This request is resolved. Start a new request for more help.',
                         border: const OutlineInputBorder(),
                         counterText: '',
                       ),
@@ -330,15 +337,21 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-Color _severityColor(String severity) {
-  switch (severity.trim().toLowerCase()) {
-    case 'critical':
-    case 'high':
-      return Colors.red;
-    case 'minor':
-    case 'low':
-      return Colors.amber.shade800;
+String _categoryLabel(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'hardware':
+      return 'Hardware';
+    case 'peripheral':
+      return 'Peripheral';
+    case 'network':
+      return 'Network';
+    case 'software':
+      return 'Software';
+    case 'account':
+      return 'Account or Login';
+    case 'other':
+      return 'Other';
     default:
-      return Colors.orange;
+      return 'General Assistance';
   }
 }
