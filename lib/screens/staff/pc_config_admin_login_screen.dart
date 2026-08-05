@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/app_config_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/theme_service.dart';
 import '../itso/pc_config_screen.dart';
 
 class PcConfigAdminLoginScreen extends StatefulWidget {
@@ -80,7 +81,20 @@ class _PcConfigAdminLoginScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin PC Configuration Login')),
+      appBar: AppBar(
+        title: const Text('Admin PC Configuration Login'),
+        actions: [
+          IconButton(
+            onPressed: () => ThemeService.instance.toggleTheme(),
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle Theme',
+          ),
+        ],
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),

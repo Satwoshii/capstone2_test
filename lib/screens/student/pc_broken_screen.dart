@@ -37,33 +37,41 @@ class PcBrokenScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: Colors.red.shade900,
+        backgroundColor: isDark ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade900,
         body: Center(
           child: Container(
             width: 820,
             constraints: const BoxConstraints(maxHeight: 760),
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.warning_amber_rounded,
-                    color: Colors.red,
+                    color: isDark ? Colors.redAccent : Colors.red,
                     size: 90,
                   ),
                   const SizedBox(height: 20),
-                  const Text(
+                  Text(
                     'PC BROKEN',
                     style: TextStyle(
-                      color: Colors.red,
+                      color: isDark ? Colors.redAccent : Colors.red,
                       fontSize: 46,
                       fontWeight: FontWeight.bold,
                     ),
@@ -134,7 +142,9 @@ class PcBrokenScreen extends StatelessWidget {
                   const SizedBox(height: 22),
                   Text(
                     '${pc.roomName} - ${pc.pcId}',
-                    style: const TextStyle(color: Colors.black54),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
                   if (sessionActive) ...[
                     const IssueSupportLauncher(compact: true),

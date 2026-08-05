@@ -6,6 +6,7 @@ import '../../models/student_log.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_identity_service.dart';
 import '../../services/sync_service.dart';
+import '../../services/theme_service.dart';
 import '../../services/windows_hardware_service.dart';
 import 'student_block_screen.dart';
 
@@ -166,6 +167,15 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
         title: const Text('Peripheral Confirmation'),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            onPressed: () => ThemeService.instance.toggleTheme(),
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle Theme',
+          ),
           IconButton(
             tooltip: 'Run hardware check again',
             onPressed: _checking ? null : _runAutomaticCheck,

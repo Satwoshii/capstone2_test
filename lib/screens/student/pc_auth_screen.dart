@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../services/app_config_service.dart';
 import '../../services/auth_session_service.dart';
+import '../../services/theme_service.dart';
 import 'peripheral_form_screen.dart';
 
 class PcAuthScreen extends StatefulWidget {
@@ -196,6 +197,17 @@ class _PcAuthScreenState extends State<PcAuthScreen> {
       appBar: AppBar(
         title: const Text('PC Authentication'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            onPressed: () => ThemeService.instance.toggleTheme(),
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle Theme',
+          ),
+        ],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -220,9 +232,18 @@ class _PcAuthScreenState extends State<PcAuthScreen> {
                   Text('PC: $_pcNumber'),
                   Text('Room: $_room'),
                   const SizedBox(height: 24),
-                  QrImageView(
-                    data: qrValue,
-                    size: 250,
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: QrImageView(
+                      data: qrValue,
+                      size: 250,
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const Text(

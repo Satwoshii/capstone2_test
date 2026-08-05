@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/app_config_service.dart';
 import '../../services/sync_service.dart';
+import '../../services/theme_service.dart';
 import '../../services/workstation_registry_service.dart';
 import '../../widgets/simple_app_bar.dart';
 
@@ -115,7 +116,20 @@ class _PcConfigScreenState extends State<PcConfigScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: simpleAppBar('PC Configuration'),
+      appBar: AppBar(
+        title: const Text('PC Configuration'),
+        actions: [
+          IconButton(
+            onPressed: () => ThemeService.instance.toggleTheme(),
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle Theme',
+          ),
+        ],
+      ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : Center(

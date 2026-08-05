@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/support_issue.dart';
 import '../../services/support_chat_service.dart';
+import '../../services/theme_service.dart';
 
 class NewSupportRequestScreen extends StatefulWidget {
   const NewSupportRequestScreen({super.key});
@@ -111,7 +112,20 @@ class _NewSupportRequestScreenState extends State<NewSupportRequestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New ITSO Support Request')),
+      appBar: AppBar(
+        title: const Text('New ITSO Support Request'),
+        actions: [
+          IconButton(
+            onPressed: () => ThemeService.instance.toggleTheme(),
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle Theme',
+          ),
+        ],
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),

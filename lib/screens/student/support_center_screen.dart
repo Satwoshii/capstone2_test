@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/support_issue.dart';
 import '../../services/support_chat_service.dart';
+import '../../services/theme_service.dart';
 import 'new_support_request_screen.dart';
 import 'support_chat_screen.dart';
 
@@ -99,6 +100,15 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
       appBar: AppBar(
         title: const Text('ITSO Support'),
         actions: [
+          IconButton(
+            onPressed: () => ThemeService.instance.toggleTheme(),
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle Theme',
+          ),
           IconButton(
             tooltip: 'Refresh',
             onPressed: _refreshing ? null : _refresh,

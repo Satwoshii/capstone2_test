@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
 import '../../services/sync_service.dart';
+import '../../services/theme_service.dart';
 import 'student_login_screen.dart';
 
 class StudentBlockScreen extends StatefulWidget {
@@ -57,6 +58,17 @@ class _StudentBlockScreenState extends State<StudentBlockScreen> {
         appBar: AppBar(
           automaticallyImplyLeading: false,
           title: const Text('Active Laboratory Session'),
+          actions: [
+            IconButton(
+              onPressed: () => ThemeService.instance.toggleTheme(),
+              icon: Icon(
+                Theme.of(context).brightness == Brightness.dark
+                    ? Icons.light_mode
+                    : Icons.dark_mode,
+              ),
+              tooltip: 'Toggle Theme',
+            ),
+          ],
         ),
         body: Center(
           child: ConstrainedBox(

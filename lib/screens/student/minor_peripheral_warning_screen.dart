@@ -48,18 +48,26 @@ class MinorPeripheralWarningScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: Colors.amber.shade700,
+        backgroundColor: isDark ? Colors.amber.shade900.withOpacity(0.4) : Colors.amber.shade700,
         body: Center(
           child: Container(
             width: 760,
             constraints: const BoxConstraints(maxHeight: 720),
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -67,7 +75,7 @@ class MinorPeripheralWarningScreen extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.warning_amber_rounded,
-                    color: Colors.amber.shade800,
+                    color: isDark ? Colors.amberAccent : Colors.amber.shade800,
                     size: 88,
                   ),
                   const SizedBox(height: 16),
@@ -75,7 +83,7 @@ class MinorPeripheralWarningScreen extends StatelessWidget {
                     'MINOR PERIPHERAL WARNING',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.amber.shade900,
+                      color: isDark ? Colors.amberAccent : Colors.amber.shade900,
                       fontSize: 34,
                       fontWeight: FontWeight.bold,
                     ),
@@ -108,16 +116,18 @@ class MinorPeripheralWarningScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Chip(
-                    avatar: const Icon(Icons.monitor_heart, size: 18),
-                    label: const Text(
+                  const Chip(
+                    avatar: Icon(Icons.monitor_heart, size: 18),
+                    label: Text(
                       'Automatic recovery check runs every 10 seconds',
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     '${pc.roomName} - ${pc.pcId}',
-                    style: const TextStyle(color: Colors.black54),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
                   if (sessionActive) ...[
                     const IssueSupportLauncher(compact: true),
