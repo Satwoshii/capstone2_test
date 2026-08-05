@@ -24,8 +24,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   final FocusNode shortcutFocusNode = FocusNode();
 
   bool loading = false;
-  bool syncingUsers = true;
-  String syncMessage = 'Connecting to the Syswatch intranet server...';
   bool _obscurePassword = true;
 
   late final AnimationController _entryController;
@@ -65,8 +63,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic));
 
-    _autoSyncUsers();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         shortcutFocusNode.requestFocus();
@@ -85,33 +81,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   }
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  Future<void> _autoSyncUsers() async {
-    if (!mounted) return;
-    setState(() {
-      syncingUsers = true;
-      syncMessage = 'Connecting to the Syswatch intranet server...';
-    });
-
-    try {
-      final count = await AuthService.refreshOfflineStudents();
-      await SyncService.instance.refreshPendingCount();
-      if (!mounted) return;
-      setState(() =>
-      syncMessage = '$count student account(s) available for offline login.');
-    } catch (_) {
-      final count = await LocalDbService.instance.countCachedStudents();
-      if (!mounted) return;
-      setState(() => syncMessage = count > 0
-          ? 'Intranet unavailable — $count saved offline account(s).'
-          : 'Intranet unavailable — no offline accounts saved yet.');
-    } finally {
-      if (mounted) {
-        setState(() => syncingUsers = false);
-        shortcutFocusNode.requestFocus();
-      }
-    }
-  }
-
   Future<void> _login() async {
     if (loading) return;
     setState(() => loading = true);
@@ -367,9 +336,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
             ),
           ),
 
-          const SizedBox(height: 20),
-          _buildSyncStatus(),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
 
           TextField(
             controller: studentIdController,
@@ -409,25 +376,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
           const SizedBox(height: 22),
 
           _buildLoginButton(),
-          const SizedBox(height: 10),
-
-          Center(
-            child: TextButton.icon(
-              onPressed: syncingUsers ? null : _autoSyncUsers,
-              style: TextButton.styleFrom(
-                foregroundColor: _textColor.withOpacity(0.45),
-                padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              ),
-              icon: const Icon(Icons.sync_rounded, size: 16),
-              label: const Text(
-                'Refresh intranet accounts',
-                style: TextStyle(fontSize: 13),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
 
           _buildThemeToggleRow(),
           const SizedBox(height: 12),
@@ -574,57 +523,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
           Icons.memory_rounded,
           color: Colors.white,
           size: 32,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSyncStatus() {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        decoration: BoxDecoration(
-          color: _fieldColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _borderColor),
-        ),
-        child: Row(
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: syncingUsers
-                  ? SizedBox(
-                key: const ValueKey('spinner'),
-                width: 15,
-                height: 15,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(_accentA),
-                ),
-              )
-                  : Icon(
-                key: const ValueKey('check'),
-                Icons.check_circle_outline_rounded,
-                size: 16,
-                color: _accentA.withOpacity(0.8),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                syncMessage,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: syncingUsers
-                      ? _accentA.withOpacity(0.85)
-                      : _subTextColor,
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
