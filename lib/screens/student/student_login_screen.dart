@@ -16,7 +16,8 @@ class StudentLoginScreen extends StatefulWidget {
   State<StudentLoginScreen> createState() => _StudentLoginScreenState();
 }
 
-class _StudentLoginScreenState extends State<StudentLoginScreen> {
+class _StudentLoginScreenState extends State<StudentLoginScreen>
+    with SingleTickerProviderStateMixin {
   final studentIdController = TextEditingController();
   final passwordController = TextEditingController();
   final FocusNode shortcutFocusNode = FocusNode();
@@ -25,36 +26,65 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   bool syncingUsers = true;
   String syncMessage = 'Connecting to the Syswatch intranet server...';
   bool _isDarkMode = true;
+  bool _obscurePassword = true;
 
-  Color get _bgColor => _isDarkMode ? const Color(0xFF0E0F12) : const Color(0xFFF5F6F9);
-  Color get _cardColor => _isDarkMode ? const Color(0xFF17181D) : Colors.white;
-  Color get _fieldColor => _isDarkMode ? const Color(0xFF1F2127) : const Color(0xFFEFF1F5);
-  Color get _accent => const Color(0xFF2EE6C5);
-  Color get _textColor => _isDarkMode ? Colors.white : const Color(0xFF1A1C1E);
-  Color get _subTextColor => _isDarkMode ? Colors.white.withOpacity(0.5) : Colors.black54;
-  Color get _borderColor => _isDarkMode ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.08);
+  late final AnimationController _entryController;
+  late final Animation<double> _fadeAnim;
+  late final Animation<Offset> _slideAnim;
 
+  // ── Palette ──────────────────────────────────────────────────────────────
+  Color get _bgColor =>
+      _isDarkMode ? const Color(0xFF090A0E) : const Color(0xFFF0F2F5);
+  Color get _cardColor =>
+      _isDarkMode ? const Color(0xFF13141A) : Colors.white;
+  Color get _fieldColor =>
+      _isDarkMode ? const Color(0xFF1C1E26) : const Color(0xFFEDF0F5);
+  Color get _accentA => const Color(0xFF2EE6C5);
+  Color get _accentB => const Color(0xFF4F8EF7);
+  Color get _textColor =>
+      _isDarkMode ? Colors.white : const Color(0xFF1A1C1E);
+  Color get _subTextColor =>
+      _isDarkMode ? Colors.white54 : Colors.black45;
+  Color get _borderColor =>
+      _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.09);
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
+
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeAnim = CurvedAnimation(parent: _entryController, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic));
+
     _autoSyncUsers();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) shortcutFocusNode.requestFocus();
+      if (mounted) {
+        shortcutFocusNode.requestFocus();
+        _entryController.forward();
+      }
     });
   }
 
   @override
   void dispose() {
+    _entryController.dispose();
     studentIdController.dispose();
     passwordController.dispose();
     shortcutFocusNode.dispose();
     super.dispose();
   }
 
+  // ── Data ──────────────────────────────────────────────────────────────────
   Future<void> _autoSyncUsers() async {
     if (!mounted) return;
-
     setState(() {
       syncingUsers = true;
       syncMessage = 'Connecting to the Syswatch intranet server...';
@@ -63,20 +93,15 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     try {
       final count = await AuthService.refreshOfflineStudents();
       await SyncService.instance.refreshPendingCount();
-
       if (!mounted) return;
-      setState(() {
-        syncMessage = '$count student account(s) available for offline login.';
-      });
+      setState(() =>
+      syncMessage = '$count student account(s) available for offline login.');
     } catch (_) {
       final count = await LocalDbService.instance.countCachedStudents();
       if (!mounted) return;
-
-      setState(() {
-        syncMessage = count > 0
-            ? 'Intranet unavailable: using $count saved offline account(s).'
-            : 'Intranet unavailable: no offline accounts are saved yet.';
-      });
+      setState(() => syncMessage = count > 0
+          ? 'Intranet unavailable — $count saved offline account(s).'
+          : 'Intranet unavailable — no offline accounts saved yet.');
     } finally {
       if (mounted) {
         setState(() => syncingUsers = false);
@@ -87,13 +112,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
   Future<void> _login() async {
     if (loading) return;
-
     setState(() => loading = true);
 
     try {
       final pc = await AppConfigService.instance.getPcIdentity();
-      final registered =
-      await AppConfigService.instance.isRegistrationConfirmed();
+      final registered = await AppConfigService.instance.isRegistrationConfirmed();
 
       if (!pc.isConfigured || !registered) {
         throw Exception(
@@ -113,7 +136,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       );
 
       await SyncService.instance.syncPendingData();
-
       if (!mounted) return;
 
       PcMonitorService.instance.beginStudentSession(user.email);
@@ -140,12 +162,22 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: _isDarkMode ? const Color(0xFF23262B) : Colors.red.shade800,
+        backgroundColor:
+        _isDarkMode ? const Color(0xFF1E2028) : Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: Text(
-          message.replaceFirst('Exception:', '').trim(),
-          style: const TextStyle(color: Colors.white),
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message.replaceFirst('Exception:', '').trim(),
+                style: const TextStyle(color: Colors.white, fontSize: 13.5),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -160,44 +192,46 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     });
   }
 
-  bool _isStaffShortcut(KeyEvent event) {
-    return event is KeyDownEvent &&
-        HardwareKeyboard.instance.isControlPressed &&
-        HardwareKeyboard.instance.isShiftPressed &&
-        event.logicalKey == LogicalKeyboardKey.keyA;
-  }
+  bool _isStaffShortcut(KeyEvent event) =>
+      event is KeyDownEvent &&
+          HardwareKeyboard.instance.isControlPressed &&
+          HardwareKeyboard.instance.isShiftPressed &&
+          event.logicalKey == LogicalKeyboardKey.keyA;
 
-  InputDecoration _fieldDecoration(String label, IconData icon) {
+  // ── Input decoration ──────────────────────────────────────────────────────
+  InputDecoration _fieldDecoration(String label, IconData icon,
+      {Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: _subTextColor),
-      prefixIcon: Icon(icon, color: _subTextColor.withOpacity(0.4), size: 20),
+      labelStyle: TextStyle(color: _subTextColor, fontSize: 14),
+      prefixIcon: Icon(icon, color: _subTextColor.withOpacity(0.45), size: 20),
+      suffixIcon: suffixIcon,
       filled: true,
       fillColor: _fieldColor,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: _borderColor),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: _accent, width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: _accentA, width: 1.5),
       ),
-      contentPadding:
-      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
     );
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return KeyboardListener(
       focusNode: shortcutFocusNode,
       autofocus: true,
-      onKeyEvent: (event) {
-        if (_isStaffShortcut(event)) _openPcConfigAdminLogin();
+      onKeyEvent: (e) {
+        if (_isStaffShortcut(e)) _openPcConfigAdminLogin();
       },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
@@ -208,157 +242,275 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
             backgroundColor: _bgColor,
             body: Stack(
               children: [
+                // Ambient background orbs
+                _buildAmbientOrbs(),
+
+                // Main content
                 Center(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(vertical: 32),
-                    child: Container(
-                      width: 420,
-                      padding: const EdgeInsets.fromLTRB(32, 40, 32, 32),
-                      decoration: BoxDecoration(
-                        color: _cardColor,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: _borderColor),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(_isDarkMode ? 0.4 : 0.08),
-                            blurRadius: 40,
-                            offset: const Offset(0, 20),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildLogoBadge(),
-                          const SizedBox(height: 20),
-                          Text(
-                            'Login Before Using PC',
-                            style: TextStyle(
-                              color: _textColor,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildSyncStatus(),
-                          const SizedBox(height: 28),
-                          TextField(
-                            controller: studentIdController,
-                            style: TextStyle(color: _textColor),
-                            cursorColor: _accent,
-                            decoration:
-                            _fieldDecoration('Student ID', Icons.badge_outlined),
-                            onSubmitted: (_) => _login(),
-                          ),
-                          const SizedBox(height: 14),
-                          TextField(
-                            controller: passwordController,
-                            obscureText: true,
-                            style: TextStyle(color: _textColor),
-                            cursorColor: _accent,
-                            decoration:
-                            _fieldDecoration('Password', Icons.lock_outline),
-                            onSubmitted: (_) => _login(),
-                          ),
-                          const SizedBox(height: 22),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: loading ? null : _login,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _accent,
-                                foregroundColor: const Color(0xFF0E0F12),
-                                disabledBackgroundColor:
-                                _accent.withOpacity(0.35),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: loading
-                                  ? Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.2,
-                                      valueColor:
-                                      AlwaysStoppedAnimation<Color>(
-                                        Color(0xFF0E0F12),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Checking...',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ],
-                              )
-                                  : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.login, size: 20),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Login',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: syncingUsers ? null : _autoSyncUsers,
-                            style: TextButton.styleFrom(
-                              foregroundColor: _textColor.withOpacity(0.55),
-                            ),
-                            icon: const Icon(Icons.sync, size: 18),
-                            label: const Text('Refresh intranet accounts'),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Administrator shortcut: Ctrl + Shift + A',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _textColor.withOpacity(0.3),
-                            ),
-                          ),
-                        ],
+                    child: FadeTransition(
+                      opacity: _fadeAnim,
+                      child: SlideTransition(
+                        position: _slideAnim,
+                        child: _buildCard(),
                       ),
                     ),
                   ),
                 ),
+
+                // Theme toggle
                 Positioned(
                   bottom: 24,
                   right: 24,
-                  child: FloatingActionButton(
-                    onPressed: () {
-                      setState(() {
-                        _isDarkMode = !_isDarkMode;
-                      });
-                    },
-                    backgroundColor: _cardColor,
-                    foregroundColor: _textColor,
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: _borderColor),
+                  child: _buildThemeToggle(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAmbientOrbs() {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(
+            top: -80,
+            left: -80,
+            child: _orb(280, _accentA.withOpacity(_isDarkMode ? 0.07 : 0.05)),
+          ),
+          Positioned(
+            bottom: -100,
+            right: -60,
+            child: _orb(320, _accentB.withOpacity(_isDarkMode ? 0.06 : 0.04)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _orb(double size, Color color) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: RadialGradient(colors: [color, Colors.transparent]),
+    ),
+  );
+
+  Widget _buildCard() {
+    return Container(
+      width: 420,
+      padding: const EdgeInsets.fromLTRB(32, 40, 32, 36),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: _borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(_isDarkMode ? 0.5 : 0.1),
+            blurRadius: 60,
+            offset: const Offset(0, 24),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Logo
+          Center(child: _buildLogoBadge()),
+          const SizedBox(height: 20),
+
+          // Headline
+          Text(
+            'Syswatch Login',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _textColor,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Student Access Portal',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _subTextColor,
+              fontSize: 13.5,
+              letterSpacing: 0.1,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+          _buildSyncStatus(),
+          const SizedBox(height: 28),
+
+          // Student ID
+          TextField(
+            controller: studentIdController,
+            style: TextStyle(color: _textColor, fontSize: 15),
+            cursorColor: _accentA,
+            decoration:
+            _fieldDecoration('Student ID', Icons.badge_outlined),
+            onSubmitted: (_) => _login(),
+          ),
+          const SizedBox(height: 12),
+
+          // Password
+          TextField(
+            controller: passwordController,
+            obscureText: _obscurePassword,
+            style: TextStyle(color: _textColor, fontSize: 15),
+            cursorColor: _accentA,
+            decoration: _fieldDecoration(
+              'Password',
+              Icons.lock_outline_rounded,
+              suffixIcon: GestureDetector(
+                onTap: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    key: ValueKey(_obscurePassword),
+                    color: _subTextColor.withOpacity(0.5),
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+            onSubmitted: (_) => _login(),
+          ),
+          const SizedBox(height: 22),
+
+          // Login button
+          _buildLoginButton(),
+          const SizedBox(height: 10),
+
+          // Refresh button
+          Center(
+            child: TextButton.icon(
+              onPressed: syncingUsers ? null : _autoSyncUsers,
+              style: TextButton.styleFrom(
+                foregroundColor: _textColor.withOpacity(0.45),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              ),
+              icon: const Icon(Icons.sync_rounded, size: 16),
+              label: const Text(
+                'Refresh intranet accounts',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Divider + admin hint
+          Row(
+            children: [
+              Expanded(child: Divider(color: _borderColor, thickness: 1)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'Ctrl + Shift + A  ·  Admin',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: _textColor.withOpacity(0.25),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Expanded(child: Divider(color: _borderColor, thickness: 1)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoginButton() {
+    return SizedBox(
+      height: 52,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: loading
+              ? null
+              : LinearGradient(
+            colors: [_accentA, _accentB],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          color: loading ? _accentA.withOpacity(0.25) : null,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: loading
+              ? []
+              : [
+            BoxShadow(
+              color: _accentA.withOpacity(0.3),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            )
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: loading ? null : _login,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            foregroundColor: const Color(0xFF080A0E),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: loading
+                ? Row(
+              key: const ValueKey('loading'),
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFF080A0E),
                     ),
-                    child: Icon(
-                      _isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                    ),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Text(
+                  'Verifying…',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            )
+                : Row(
+              key: const ValueKey('idle'),
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.login_rounded, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Login',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15.5,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
@@ -371,63 +523,138 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
   Widget _buildLogoBadge() {
     return Container(
-      width: 72,
-      height: 72,
+      width: 76,
+      height: 76,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: _accent, width: 2),
+        gradient: LinearGradient(
+          colors: [
+            _accentA.withOpacity(0.15),
+            _accentB.withOpacity(0.12),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: _accentA.withOpacity(0.45),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: _accent.withOpacity(0.25),
-            blurRadius: 20,
-            spreadRadius: 1,
+            color: _accentA.withOpacity(0.2),
+            blurRadius: 24,
+            spreadRadius: 2,
           ),
         ],
       ),
-      child: Icon(Icons.memory_rounded, color: _accent, size: 30),
+      child: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
+          colors: [_accentA, _accentB],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(bounds),
+        child: const Icon(
+          Icons.memory_rounded,
+          color: Colors.white,
+          size: 32,
+        ),
+      ),
     );
   }
 
   Widget _buildSyncStatus() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: _fieldColor,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (syncingUsers) ...[
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(_accent),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: _fieldColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _borderColor),
+        ),
+        child: Row(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: syncingUsers
+                  ? SizedBox(
+                key: const ValueKey('spinner'),
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(_accentA),
+                ),
+              )
+                  : Icon(
+                key: const ValueKey('check'),
+                Icons.check_circle_outline_rounded,
+                size: 16,
+                color: _accentA.withOpacity(0.8),
               ),
             ),
             const SizedBox(width: 10),
-          ] else
-            Icon(
-              Icons.check_circle_outline,
-              size: 16,
-              color: _accent.withOpacity(0.8),
+            Expanded(
+              child: Text(
+                syncMessage,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: syncingUsers
+                      ? _accentA.withOpacity(0.85)
+                      : _subTextColor,
+                ),
+              ),
             ),
-          if (!syncingUsers) const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              syncMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: syncingUsers
-                    ? _accent.withOpacity(0.85)
-                    : _textColor.withOpacity(0.6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(_isDarkMode ? 0.4 : 0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => setState(() => _isDarkMode = !_isDarkMode),
+          child: SizedBox(
+            width: 52,
+            height: 52,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Icon(
+                  _isDarkMode
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  key: ValueKey(_isDarkMode),
+                  color: _textColor.withOpacity(0.7),
+                  size: 22,
+                ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

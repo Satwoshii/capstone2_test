@@ -37,4 +37,4 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/tray/app_icon.ico
+    - assets/
