@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
 import '../../services/sync_service.dart';
+import '../../services/theme_service.dart';
 import '../staff/pc_config_admin_login_screen.dart';
 import 'student_access_screen.dart';
 
@@ -25,7 +26,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   bool loading = false;
   bool syncingUsers = true;
   String syncMessage = 'Connecting to the Syswatch intranet server...';
-  bool _isDarkMode = true;
   bool _obscurePassword = true;
 
   late final AnimationController _entryController;
@@ -33,6 +33,8 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   late final Animation<Offset> _slideAnim;
 
   // ── Palette ──────────────────────────────────────────────────────────────
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
+
   Color get _bgColor =>
       _isDarkMode ? const Color(0xFF090A0E) : const Color(0xFFF0F2F5);
   Color get _cardColor =>
@@ -242,10 +244,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
             backgroundColor: _bgColor,
             body: Stack(
               children: [
-                // Ambient background orbs
                 _buildAmbientOrbs(),
-
-                // Main content
                 Center(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(vertical: 32),
@@ -258,8 +257,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
                     ),
                   ),
                 ),
-
-                // Theme toggle
                 Positioned(
                   bottom: 24,
                   right: 24,
@@ -269,6 +266,31 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _cardColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: _borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(_isDarkMode ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => ThemeService.instance.toggleTheme(),
+        icon: Icon(
+          _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          color: _isDarkMode ? Colors.amber : _accentB,
+        ),
+        tooltip: 'Toggle Light/Dark Mode',
       ),
     );
   }
@@ -321,11 +343,9 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Logo
           Center(child: _buildLogoBadge()),
           const SizedBox(height: 20),
 
-          // Headline
           Text(
             'Syswatch Login',
             textAlign: TextAlign.center,
@@ -351,18 +371,15 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
           _buildSyncStatus(),
           const SizedBox(height: 28),
 
-          // Student ID
           TextField(
             controller: studentIdController,
             style: TextStyle(color: _textColor, fontSize: 15),
             cursorColor: _accentA,
-            decoration:
-            _fieldDecoration('Student ID', Icons.badge_outlined),
+            decoration: _fieldDecoration('Student ID', Icons.badge_outlined),
             onSubmitted: (_) => _login(),
           ),
           const SizedBox(height: 12),
 
-          // Password
           TextField(
             controller: passwordController,
             obscureText: _obscurePassword,
@@ -391,11 +408,9 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
           ),
           const SizedBox(height: 22),
 
-          // Login button
           _buildLoginButton(),
           const SizedBox(height: 10),
 
-          // Refresh button
           Center(
             child: TextButton.icon(
               onPressed: syncingUsers ? null : _autoSyncUsers,
@@ -414,7 +429,9 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
 
           const SizedBox(height: 12),
 
-          // Divider + admin hint
+          _buildThemeToggleRow(),
+          const SizedBox(height: 12),
+
           Row(
             children: [
               Expanded(child: Divider(color: _borderColor, thickness: 1)),
@@ -613,46 +630,86 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
     );
   }
 
-  Widget _buildThemeToggle() {
+  Widget _buildThemeToggleRow() {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
+        color: _fieldColor,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(_isDarkMode ? 0.4 : 0.1),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+      ),
+      child: Row(
+        children: [
+          _themeOption(
+            label: 'Light',
+            icon: Icons.light_mode_outlined,
+            selected: !_isDarkMode,
+            onTap: () => ThemeService.instance.setThemeMode(ThemeMode.light),
+          ),
+          _themeOption(
+            label: 'Dark',
+            icon: Icons.dark_mode_outlined,
+            selected: _isDarkMode,
+            onTap: () => ThemeService.instance.setThemeMode(ThemeMode.dark),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => setState(() => _isDarkMode = !_isDarkMode),
-          child: SizedBox(
-            width: 52,
-            height: 52,
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                transitionBuilder: (child, anim) =>
-                    ScaleTransition(scale: anim, child: child),
+    );
+  }
+
+  Widget _themeOption({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          height: 40,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            gradient: selected
+                ? LinearGradient(
+              colors: [
+                _accentA.withOpacity(0.18),
+                _accentB.withOpacity(0.14),
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            )
+                : null,
+            border: selected
+                ? Border.all(color: _accentA.withOpacity(0.35), width: 1)
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
                 child: Icon(
-                  _isDarkMode
-                      ? Icons.light_mode_outlined
-                      : Icons.dark_mode_outlined,
-                  key: ValueKey(_isDarkMode),
-                  color: _textColor.withOpacity(0.7),
-                  size: 22,
+                  icon,
+                  key: ValueKey(selected),
+                  size: 16,
+                  color: selected ? _accentA : _subTextColor.withOpacity(0.5),
                 ),
               ),
-            ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected ? _textColor : _subTextColor.withOpacity(0.6),
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -3,6 +3,14 @@ import 'package:flutter/material.dart';
 import '../../services/pc_monitor_service.dart';
 import '../student/student_login_screen.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SETUP NOTE
+// Add the SysWatch logo to your pubspec.yaml under flutter > assets:
+//   assets:
+//     - assets/images/syswatch_logo.png
+// Copy attached_assets/image_1785934598393.png → assets/images/syswatch_logo.png
+// ─────────────────────────────────────────────────────────────────────────────
+
 class StartupScreen extends StatefulWidget {
   const StartupScreen({super.key});
 
@@ -35,18 +43,22 @@ class _StartupScreenState extends State<StartupScreen>
   late final Animation<double> _glowAnim;
 
   // ── Palette ──────────────────────────────────────────────────────────────
-  static const Color _bgColor   = Color(0xFF090A0E);
-  static const Color _cardColor = Color(0xFF13141A);
-  static const Color _accentA   = Color(0xFF2EE6C5);
-  static const Color _accentB   = Color(0xFF4F8EF7);
-  static const Color _border    = Color(0x12FFFFFF);
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
+
+  Color get _bgColor =>
+      _isDarkMode ? const Color(0xFF090A0E) : const Color(0xFFF0F2F5);
+  Color get _cardColor =>
+      _isDarkMode ? const Color(0xFF13141A) : Colors.white;
+  Color get _accentA => const Color(0xFF2EE6C5);
+  Color get _accentB => const Color(0xFF4F8EF7);
+  Color get _border =>
+      _isDarkMode ? const Color(0x12FFFFFF) : Colors.black.withOpacity(0.09);
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
 
-    // Pulsing outer ring
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -54,13 +66,10 @@ class _StartupScreenState extends State<StartupScreen>
     _pulseAnim = Tween<double>(begin: 0.88, end: 1.14).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
-
-    // Glow intensity follows pulse
     _glowAnim = Tween<double>(begin: 0.2, end: 0.5).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
 
-    // Card entry
     _entryCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -71,7 +80,6 @@ class _StartupScreenState extends State<StartupScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic));
 
-    // Progress bar (driven manually by step count)
     _progressCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -91,15 +99,15 @@ class _StartupScreenState extends State<StartupScreen>
 
   // ── Boot sequence ─────────────────────────────────────────────────────────
   Future<void> _boot() async {
-    await _advanceTo(1);                                  // "Checking hardware…"
+    await _advanceTo(1);
     await PcMonitorService.instance.checkNow(showWarnings: false);
 
     if (!mounted) return;
-    await _advanceTo(2);                                  // "Loading offline…"
+    await _advanceTo(2);
     await Future.delayed(const Duration(milliseconds: 300));
 
     if (!mounted) return;
-    await _advanceTo(3);                                  // "Ready."
+    await _advanceTo(3);
     await Future.delayed(const Duration(milliseconds: 450));
 
     if (!mounted) return;
@@ -138,10 +146,7 @@ class _StartupScreenState extends State<StartupScreen>
         backgroundColor: _bgColor,
         body: Stack(
           children: [
-            // Ambient orbs (same as login screen)
             _buildAmbientOrbs(),
-
-            // Card
             Center(
               child: FadeTransition(
                 opacity: _fadeAnim,
@@ -157,7 +162,6 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  // ── Background orbs ───────────────────────────────────────────────────────
   Widget _buildAmbientOrbs() {
     return IgnorePointer(
       child: Stack(
@@ -186,7 +190,6 @@ class _StartupScreenState extends State<StartupScreen>
     ),
   );
 
-  // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard() {
     return Container(
       width: 380,
@@ -209,9 +212,8 @@ class _StartupScreenState extends State<StartupScreen>
           _buildPulsingLogo(),
           const SizedBox(height: 26),
 
-          // Brand name with gradient
           ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
+            shaderCallback: (bounds) => LinearGradient(
               colors: [_accentA, _accentB],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
@@ -219,7 +221,7 @@ class _StartupScreenState extends State<StartupScreen>
             child: const Text(
               'SysWatch',
               style: TextStyle(
-                color: Colors.white, // masked by shader
+                color: Colors.white,
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.6,
@@ -227,10 +229,10 @@ class _StartupScreenState extends State<StartupScreen>
             ),
           ),
           const SizedBox(height: 5),
-          const Text(
+          Text(
             'PC Access & Monitoring System',
             style: TextStyle(
-              color: Color(0x66FFFFFF),
+              color: _isDarkMode ? const Color(0x66FFFFFF) : Colors.black45,
               fontSize: 13,
               letterSpacing: 0.2,
             ),
@@ -239,12 +241,9 @@ class _StartupScreenState extends State<StartupScreen>
           const SizedBox(height: 36),
           _buildProgressBar(),
           const SizedBox(height: 16),
-
-          // Step indicators
           _buildStepDots(),
           const SizedBox(height: 14),
 
-          // Status message
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             transitionBuilder: (child, anim) => FadeTransition(
@@ -261,8 +260,8 @@ class _StartupScreenState extends State<StartupScreen>
               _message,
               key: ValueKey(_stepIndex),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0x80FFFFFF),
+              style: TextStyle(
+                color: _isDarkMode ? const Color(0x80FFFFFF) : Colors.black54,
                 fontSize: 13.5,
                 height: 1.4,
               ),
@@ -273,7 +272,6 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  // ── Logo with pulsing ring ─────────────────────────────────────────────────
   Widget _buildPulsingLogo() {
     return SizedBox(
       width: 130,
@@ -284,7 +282,6 @@ class _StartupScreenState extends State<StartupScreen>
           return Stack(
             alignment: Alignment.center,
             children: [
-              // Outermost pulsing glow ring
               Transform.scale(
                 scale: _pulseAnim.value,
                 child: Container(
@@ -306,8 +303,6 @@ class _StartupScreenState extends State<StartupScreen>
                   ),
                 ),
               ),
-
-              // Middle ring (static)
               Container(
                 width: 96,
                 height: 96,
@@ -327,8 +322,6 @@ class _StartupScreenState extends State<StartupScreen>
                   ),
                 ),
               ),
-
-              // Logo image
               ClipOval(
                 child: SizedBox(
                   width: 78,
@@ -336,9 +329,8 @@ class _StartupScreenState extends State<StartupScreen>
                   child: Image.asset(
                     'assets/images/syswatch_logo.png',
                     fit: BoxFit.contain,
-                    // Fallback if asset not yet added
                     errorBuilder: (_, __, ___) => ShaderMask(
-                      shaderCallback: (b) => const LinearGradient(
+                      shaderCallback: (b) => LinearGradient(
                         colors: [_accentA, _accentB],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -359,7 +351,6 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  // ── Gradient progress bar ─────────────────────────────────────────────────
   Widget _buildProgressBar() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -371,17 +362,15 @@ class _StartupScreenState extends State<StartupScreen>
           builder: (context, _) {
             return Stack(
               children: [
-                // Track
-                Container(color: Colors.white.withOpacity(0.07)),
-                // Fill
+                Container(color: _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05)),
                 FractionallySizedBox(
                   widthFactor: _progressCtrl.value,
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [_accentA, _accentB],
                       ),
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
                           color: Color(0x552EE6C5),
                           blurRadius: 8,
@@ -398,7 +387,6 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  // ── Step dot indicators ────────────────────────────────────────────────────
   Widget _buildStepDots() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -414,16 +402,11 @@ class _StartupScreenState extends State<StartupScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             gradient: isActive
-                ? const LinearGradient(colors: [_accentA, _accentB])
+                ? LinearGradient(colors: [_accentA, _accentB])
                 : null,
-            color: isActive ? null : Colors.white.withOpacity(0.12),
+            color: isActive ? null : (_isDarkMode ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.1)),
             boxShadow: isCurrent
-                ? [
-              const BoxShadow(
-                color: Color(0x402EE6C5),
-                blurRadius: 8,
-              )
-            ]
+                ? [const BoxShadow(color: Color(0x402EE6C5), blurRadius: 8)]
                 : [],
           ),
         );

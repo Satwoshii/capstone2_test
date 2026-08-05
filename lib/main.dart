@@ -13,6 +13,7 @@ import 'services/local_db_service.dart';
 import 'services/pc_monitor_service.dart';
 import 'services/startup_service.dart';
 import 'services/sync_service.dart';
+import 'services/theme_service.dart';
 import 'services/tray_service.dart';
 
 Future<void> main() async {
@@ -48,6 +49,7 @@ Future<void> main() async {
 
   await LocalDbService.instance.init();
   await AppConfigService.instance.init();
+  await ThemeService.instance.init();
 
   runApp(const HybridPcMonitoringApp());
 
@@ -61,15 +63,27 @@ class HybridPcMonitoringApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: appNavigatorKey,
-      title: 'Syswatch',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: Colors.blue,
-        useMaterial3: true,
-      ),
-      home: const StartupScreen(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeService.instance.themeMode,
+      builder: (context, mode, child) {
+        return MaterialApp(
+          navigatorKey: appNavigatorKey,
+          title: 'Syswatch',
+          debugShowCheckedModeBanner: false,
+          themeMode: mode,
+          theme: ThemeData(
+            colorSchemeSeed: Colors.blue,
+            useMaterial3: true,
+            brightness: Brightness.light,
+          ),
+          darkTheme: ThemeData(
+            colorSchemeSeed: Colors.blue,
+            useMaterial3: true,
+            brightness: Brightness.dark,
+          ),
+          home: const StartupScreen(),
+        );
+      },
     );
   }
 }
