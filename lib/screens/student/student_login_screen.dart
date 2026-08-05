@@ -6,7 +6,6 @@ import '../../services/auth_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
 import '../../services/sync_service.dart';
-import '../../widgets/simple_app_bar.dart';
 import '../staff/pc_config_admin_login_screen.dart';
 import 'student_access_screen.dart';
 
@@ -25,6 +24,15 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   bool loading = false;
   bool syncingUsers = true;
   String syncMessage = 'Connecting to the Syswatch intranet server...';
+  bool _isDarkMode = true;
+
+  Color get _bgColor => _isDarkMode ? const Color(0xFF0E0F12) : const Color(0xFFF5F6F9);
+  Color get _cardColor => _isDarkMode ? const Color(0xFF17181D) : Colors.white;
+  Color get _fieldColor => _isDarkMode ? const Color(0xFF1F2127) : const Color(0xFFEFF1F5);
+  Color get _accent => const Color(0xFF2EE6C5);
+  Color get _textColor => _isDarkMode ? Colors.white : const Color(0xFF1A1C1E);
+  Color get _subTextColor => _isDarkMode ? Colors.white.withOpacity(0.5) : Colors.black54;
+  Color get _borderColor => _isDarkMode ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.08);
 
   @override
   void initState() {
@@ -85,12 +93,12 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     try {
       final pc = await AppConfigService.instance.getPcIdentity();
       final registered =
-          await AppConfigService.instance.isRegistrationConfirmed();
+      await AppConfigService.instance.isRegistrationConfirmed();
 
       if (!pc.isConfigured || !registered) {
         throw Exception(
           'This workstation is not registered. Ask an administrator to press '
-          'Ctrl + Shift + A and complete PC Configuration.',
+              'Ctrl + Shift + A and complete PC Configuration.',
         );
       }
 
@@ -132,7 +140,13 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message.replaceFirst('Exception:', '').trim()),
+        backgroundColor: _isDarkMode ? const Color(0xFF23262B) : Colors.red.shade800,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: Text(
+          message.replaceFirst('Exception:', '').trim(),
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
@@ -153,6 +167,30 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         event.logicalKey == LogicalKeyboardKey.keyA;
   }
 
+  InputDecoration _fieldDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: _subTextColor),
+      prefixIcon: Icon(icon, color: _subTextColor.withOpacity(0.4), size: 20),
+      filled: true,
+      fillColor: _fieldColor,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: _borderColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: _accent, width: 1.5),
+      ),
+      contentPadding:
+      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return KeyboardListener(
@@ -167,101 +205,229 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         child: PopScope(
           canPop: false,
           child: Scaffold(
-            appBar: simpleAppBar('Student Authentication'),
-            body: Center(
-              child: SizedBox(
-                width: 430,
-                child: Card(
-                  elevation: 3,
-                  child: Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.lan, size: 64),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Login Before Using PC',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+            backgroundColor: _bgColor,
+            body: Stack(
+              children: [
+                Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Container(
+                      width: 420,
+                      padding: const EdgeInsets.fromLTRB(32, 40, 32, 32),
+                      decoration: BoxDecoration(
+                        color: _cardColor,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: _borderColor),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(_isDarkMode ? 0.4 : 0.08),
+                            blurRadius: 40,
+                            offset: const Offset(0, 20),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (syncingUsers) ...[
-                              const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Flexible(
-                              child: Text(
-                                syncMessage,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: syncingUsers
-                                      ? Colors.blue
-                                      : Colors.grey.shade700,
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildLogoBadge(),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Login Before Using PC',
+                            style: TextStyle(
+                              color: _textColor,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildSyncStatus(),
+                          const SizedBox(height: 28),
+                          TextField(
+                            controller: studentIdController,
+                            style: TextStyle(color: _textColor),
+                            cursorColor: _accent,
+                            decoration:
+                            _fieldDecoration('Student ID', Icons.badge_outlined),
+                            onSubmitted: (_) => _login(),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: passwordController,
+                            obscureText: true,
+                            style: TextStyle(color: _textColor),
+                            cursorColor: _accent,
+                            decoration:
+                            _fieldDecoration('Password', Icons.lock_outline),
+                            onSubmitted: (_) => _login(),
+                          ),
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: loading ? null : _login,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _accent,
+                                foregroundColor: const Color(0xFF0E0F12),
+                                disabledBackgroundColor:
+                                _accent.withOpacity(0.35),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
+                              child: loading
+                                  ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      valueColor:
+                                      AlwaysStoppedAnimation<Color>(
+                                        Color(0xFF0E0F12),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Checking...',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              )
+                                  : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.login, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Login',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        TextField(
-                          controller: studentIdController,
-                          decoration: const InputDecoration(
-                            labelText: 'Student ID',
-                            border: OutlineInputBorder(),
                           ),
-                          onSubmitted: (_) => _login(),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Password',
-                            border: OutlineInputBorder(),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: syncingUsers ? null : _autoSyncUsers,
+                            style: TextButton.styleFrom(
+                              foregroundColor: _textColor.withOpacity(0.55),
+                            ),
+                            icon: const Icon(Icons.sync, size: 18),
+                            label: const Text('Refresh intranet accounts'),
                           ),
-                          onSubmitted: (_) => _login(),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton.icon(
-                            onPressed: loading ? null : _login,
-                            icon: const Icon(Icons.login),
-                            label: Text(
-                              loading ? 'Checking...' : 'Login',
+                          const SizedBox(height: 4),
+                          Text(
+                            'Administrator shortcut: Ctrl + Shift + A',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _textColor.withOpacity(0.3),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextButton.icon(
-                          onPressed: syncingUsers ? null : _autoSyncUsers,
-                          icon: const Icon(Icons.sync),
-                          label: const Text('Refresh intranet accounts'),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Administrator shortcut: Ctrl + Shift + A',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+                Positioned(
+                  bottom: 24,
+                  right: 24,
+                  child: FloatingActionButton(
+                    onPressed: () {
+                      setState(() {
+                        _isDarkMode = !_isDarkMode;
+                      });
+                    },
+                    backgroundColor: _cardColor,
+                    foregroundColor: _textColor,
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: _borderColor),
+                    ),
+                    child: Icon(
+                      _isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLogoBadge() {
+    return Container(
+      width: 72,
+      height: 72,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _accent, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withOpacity(0.25),
+            blurRadius: 20,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Icon(Icons.memory_rounded, color: _accent, size: 30),
+    );
+  }
+
+  Widget _buildSyncStatus() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _fieldColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (syncingUsers) ...[
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(_accent),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ] else
+            Icon(
+              Icons.check_circle_outline,
+              size: 16,
+              color: _accent.withOpacity(0.8),
+            ),
+          if (!syncingUsers) const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              syncMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: syncingUsers
+                    ? _accent.withOpacity(0.85)
+                    : _textColor.withOpacity(0.6),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
