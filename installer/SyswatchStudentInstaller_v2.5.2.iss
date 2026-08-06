@@ -4,42 +4,52 @@
 #define MyAppExeName "Syswatch.exe"
 #define VCRedistFile "VC_redist.x64.exe"
 
-; This script must be stored in the project's "installer" folder.
+; Keep this script in the project's installer folder.
 #define ProjectRoot AddBackslash(SourcePath) + ".."
 #define ReleaseDir AddBackslash(ProjectRoot) + "build\windows\x64\runner\Release"
 
-; Stop immediately if this is not the latest Syswatch Flutter project.
-#if !FileExists(AddBackslash(ProjectRoot) + "lib\screens\student\student_login_screen.dart")
-  #error "student_login_screen.dart was not found. Put this .iss file inside the project's installer folder."
+; Confirm that this is the Syswatch Student project.
+#if !FileExists(AddBackslash(ProjectRoot) + "pubspec.yaml")
+  #error "pubspec.yaml was not found. Put this .iss file inside the project's installer folder."
 #endif
 
-; Use the Flutter SDK path from this Syswatch development PC when available.
-; Otherwise, fall back to flutter.bat from the Windows PATH.
+#if !FileExists(AddBackslash(ProjectRoot) + "lib\screens\student\student_login_screen.dart")
+  #error "The Syswatch Student login source was not found. Check the project folder."
+#endif
+
+#if !FileExists(AddBackslash(SourcePath) + VCRedistFile)
+  #error "VC_redist.x64.exe was not found beside this .iss file."
+#endif
+
+; Use the Flutter installation used on the Syswatch development PC.
+; If it is installed elsewhere, the compiler uses flutter.bat from PATH.
 #if FileExists("C:\Flutter\src\flutter\bin\flutter.bat")
   #define FlutterExe "C:\Flutter\src\flutter\bin\flutter.bat"
+#elif FileExists("C:\src\flutter\bin\flutter.bat")
+  #define FlutterExe "C:\src\flutter\bin\flutter.bat"
 #else
   #define FlutterExe "flutter.bat"
 #endif
 
-; Always rebuild the current Flutter source before packaging it.
-; This prevents an old build\windows\...\Release folder from being reused.
+; Always rebuild the latest frontend before packaging it.
+; This prevents Inno Setup from reusing an old Release folder.
 #define FlutterCleanExitCode Exec(FlutterExe, "clean", ProjectRoot, 1, 1)
 #if FlutterCleanExitCode != 0
-  #error "flutter clean failed. Check the Flutter SDK path, then compile this script again."
+  #error "flutter clean failed. Check the Flutter SDK path and try again."
 #endif
 
 #define FlutterPackagesExitCode Exec(FlutterExe, "pub get", ProjectRoot, 1, 1)
 #if FlutterPackagesExitCode != 0
-  #error "flutter pub get failed. Fix the reported dependency error, then compile this script again."
+  #error "flutter pub get failed. Fix the dependency error and try again."
 #endif
 
 #define FlutterBuildExitCode Exec(FlutterExe, "build windows --release", ProjectRoot, 1, 1)
 #if FlutterBuildExitCode != 0
-  #error "Flutter Windows release build failed. Fix the reported build error, then compile this script again."
+  #error "Flutter Windows release build failed. Fix the build error and try again."
 #endif
 
 #if !FileExists(AddBackslash(ReleaseDir) + MyAppExeName)
-  #error "The Flutter build finished without creating build\windows\x64\runner\Release\Syswatch.exe."
+  #error "The release build did not create build\windows\x64\runner\Release\Syswatch.exe."
 #endif
 
 [Setup]
@@ -68,6 +78,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 
 CloseApplications=yes
+CloseApplicationsFilter={#MyAppExeName}
 RestartApplications=no
 RestartIfNeededByRun=no
 SetupLogging=yes
@@ -86,7 +97,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Name: "startup"; Description: "Start Syswatch Student when Windows starts"; GroupDescription: "Startup:"; Flags: checkedonce
 
 [Files]
-; Packages the fresh Flutter build created above, including the redesigned UI.
+; Include the complete fresh Flutter release: EXE, DLLs, plug-ins, and data.
 Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#VCRedistFile}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
