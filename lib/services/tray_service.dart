@@ -21,7 +21,7 @@ class TrayService with TrayListener {
     await trayManager.setIcon(
       Platform.isWindows
           ? 'assets/tray/app_icon.ico'
-          : 'assets/tray/app_icon.png',
+          : 'assets/tray/SysWatch_Logo.png',
     );
 
     await trayManager.setToolTip('Syswatch');

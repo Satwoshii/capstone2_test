@@ -58,69 +58,93 @@ class _StudentBlockScreenState extends State<StudentBlockScreen> {
         appBar: AppBar(
           automaticallyImplyLeading: false,
           title: const Text('Active Laboratory Session'),
-          actions: [
-            IconButton(
-              onPressed: () => ThemeService.instance.toggleTheme(),
-              icon: Icon(
-                Theme.of(context).brightness == Brightness.dark
-                    ? Icons.light_mode
-                    : Icons.dark_mode,
-              ),
-              tooltip: 'Toggle Theme',
-            ),
-          ],
         ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
-            child: Card(
-              margin: const EdgeInsets.all(24),
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.verified_user, size: 72),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Authentication and form completed',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                      textAlign: TextAlign.center,
+        body: Stack(
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: Card(
+                  margin: const EdgeInsets.all(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.verified_user, size: 72),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Authentication and form completed',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(widget.studentEmail),
+                        Text('PC ${widget.pcNumber} • Room ${widget.room}'),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'The single Syswatch monitor continues in the '
+                          'background. Minor peripheral problems do not end this '
+                          'session.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        ValueListenableBuilder<int>(
+                          valueListenable: SyncService.instance.pendingItems,
+                          builder: (_, pending, __) {
+                            return Chip(
+                              avatar: const Icon(Icons.sync, size: 18),
+                              label: Text('$pending pending sync item(s)'),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: _endingSession ? null : _endSession,
+                          icon: const Icon(Icons.logout),
+                          label: Text(
+                            _endingSession ? 'Ending session...' : 'End Session',
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(widget.studentEmail),
-                    Text('PC ${widget.pcNumber} • Room ${widget.room}'),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'The single Syswatch monitor continues in the '
-                      'background. Minor peripheral problems do not end this '
-                      'session.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    ValueListenableBuilder<int>(
-                      valueListenable: SyncService.instance.pendingItems,
-                      builder: (_, pending, __) {
-                        return Chip(
-                          avatar: const Icon(Icons.sync, size: 18),
-                          label: Text('$pending pending sync item(s)'),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: _endingSession ? null : _endSession,
-                      icon: const Icon(Icons.logout),
-                      label: Text(
-                        _endingSession ? 'Ending session...' : 'End Session',
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: _buildThemeToggle(context),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => ThemeService.instance.toggleTheme(),
+        icon: Icon(
+          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          color: isDark ? Colors.amber : Colors.blue,
+        ),
+        tooltip: 'Toggle Light/Dark Mode',
       ),
     );
   }

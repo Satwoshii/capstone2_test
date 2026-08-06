@@ -46,7 +46,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   Color get _subTextColor =>
       _isDarkMode ? Colors.white54 : Colors.black45;
   Color get _borderColor =>
-      _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.09);
+      _isDarkMode ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.09);
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -175,7 +175,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: _subTextColor, fontSize: 14),
-      prefixIcon: Icon(icon, color: _subTextColor.withOpacity(0.45), size: 20),
+      prefixIcon: Icon(icon, color: _subTextColor.withValues(alpha: 0.45), size: 20),
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: _fieldColor,

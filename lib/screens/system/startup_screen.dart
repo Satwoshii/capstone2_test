@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../services/pc_monitor_service.dart';
+import '../../services/theme_service.dart';
 import '../student/student_login_screen.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SETUP NOTE
-// Add the SysWatch logo to your pubspec.yaml under flutter > assets:
-//   assets:
-//     - assets/images/syswatch_logo.png
-// Copy attached_assets/image_1785934598393.png → assets/images/syswatch_logo.png
-// ─────────────────────────────────────────────────────────────────────────────
 
 class StartupScreen extends StatefulWidget {
   const StartupScreen({super.key});
@@ -21,7 +14,6 @@ class StartupScreen extends StatefulWidget {
 class _StartupScreenState extends State<StartupScreen>
     with TickerProviderStateMixin {
 
-  // ── Boot steps ──────────────────────────────────────────────────────────
   static const _steps = [
     'Initialising SysWatch...',
     'Checking hardware and peripherals...',
@@ -32,7 +24,6 @@ class _StartupScreenState extends State<StartupScreen>
   int _stepIndex = 0;
   String get _message => _steps[_stepIndex.clamp(0, _steps.length - 1)];
 
-  // ── Animation controllers ────────────────────────────────────────────────
   late final AnimationController _pulseCtrl;
   late final AnimationController _entryCtrl;
   late final AnimationController _progressCtrl;
@@ -42,7 +33,6 @@ class _StartupScreenState extends State<StartupScreen>
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _glowAnim;
 
-  // ── Palette ──────────────────────────────────────────────────────────────
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
 
   Color get _bgColor =>
@@ -52,9 +42,8 @@ class _StartupScreenState extends State<StartupScreen>
   Color get _accentA => const Color(0xFF2EE6C5);
   Color get _accentB => const Color(0xFF4F8EF7);
   Color get _border =>
-      _isDarkMode ? const Color(0x12FFFFFF) : Colors.black.withOpacity(0.09);
+      _isDarkMode ? const Color(0x12FFFFFF) : Colors.black.withValues(alpha: 0.09);
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -97,7 +86,6 @@ class _StartupScreenState extends State<StartupScreen>
     super.dispose();
   }
 
-  // ── Boot sequence ─────────────────────────────────────────────────────────
   Future<void> _boot() async {
     await _advanceTo(1);
     await PcMonitorService.instance.checkNow(showWarnings: false);
@@ -137,7 +125,6 @@ class _StartupScreenState extends State<StartupScreen>
     await Future.delayed(const Duration(milliseconds: 200));
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -156,8 +143,38 @@ class _StartupScreenState extends State<StartupScreen>
                 ),
               ),
             ),
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: _buildThemeToggle(),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _cardColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: _isDarkMode ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => ThemeService.instance.toggleTheme(),
+        icon: Icon(
+          _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          color: _isDarkMode ? Colors.amber : _accentB,
+        ),
+        tooltip: 'Toggle Light/Dark Mode',
       ),
     );
   }
@@ -169,12 +186,12 @@ class _StartupScreenState extends State<StartupScreen>
           Positioned(
             top: -90,
             left: -90,
-            child: _orb(300, _accentA.withOpacity(0.07)),
+            child: _orb(300, _accentA.withValues(alpha: 0.07)),
           ),
           Positioned(
             bottom: -110,
             right: -70,
-            child: _orb(340, _accentB.withOpacity(0.06)),
+            child: _orb(340, _accentB.withValues(alpha: 0.06)),
           ),
         ],
       ),
@@ -200,7 +217,7 @@ class _StartupScreenState extends State<StartupScreen>
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.55),
+            color: Colors.black.withValues(alpha: 0.55),
             blurRadius: 64,
             offset: const Offset(0, 28),
           ),
@@ -290,12 +307,12 @@ class _StartupScreenState extends State<StartupScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: _accentA.withOpacity(_glowAnim.value * 0.6),
+                      color: _accentA.withValues(alpha: _glowAnim.value * 0.6),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: _accentA.withOpacity(_glowAnim.value * 0.4),
+                        color: _accentA.withValues(alpha: _glowAnim.value * 0.4),
                         blurRadius: 28,
                         spreadRadius: 4,
                       ),
@@ -310,14 +327,14 @@ class _StartupScreenState extends State<StartupScreen>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      _accentA.withOpacity(0.12),
-                      _accentB.withOpacity(0.10),
+                      _accentA.withValues(alpha: 0.12),
+                      _accentB.withValues(alpha: 0.10),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   border: Border.all(
-                    color: _accentA.withOpacity(0.5),
+                    color: _accentA.withValues(alpha: 0.5),
                     width: 1.8,
                   ),
                 ),
@@ -362,7 +379,7 @@ class _StartupScreenState extends State<StartupScreen>
           builder: (context, _) {
             return Stack(
               children: [
-                Container(color: _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05)),
+                Container(color: _isDarkMode ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.05)),
                 FractionallySizedBox(
                   widthFactor: _progressCtrl.value,
                   child: DecoratedBox(
@@ -404,7 +421,7 @@ class _StartupScreenState extends State<StartupScreen>
             gradient: isActive
                 ? LinearGradient(colors: [_accentA, _accentB])
                 : null,
-            color: isActive ? null : (_isDarkMode ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.1)),
+            color: isActive ? null : (_isDarkMode ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
             boxShadow: isCurrent
                 ? [const BoxShadow(color: Color(0x402EE6C5), blurRadius: 8)]
                 : [],

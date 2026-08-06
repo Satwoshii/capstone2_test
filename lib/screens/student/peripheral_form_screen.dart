@@ -105,7 +105,7 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
               ? 'A problem was detected and confirmed during startup checking.'
               : _descriptionController.text.trim(),
           severity:
-              _failedComponents.contains('network') ? 'high' : 'minor',
+              _failedComponents.contains('network') ? 'High' : 'Minor',
           source: 'peripheral_confirmation_form',
           detectedBySystem: true,
           createdAt: now,
@@ -168,103 +168,129 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            onPressed: () => ThemeService.instance.toggleTheme(),
-            icon: Icon(
-              Theme.of(context).brightness == Brightness.dark
-                  ? Icons.light_mode
-                  : Icons.dark_mode,
-            ),
-            tooltip: 'Toggle Theme',
-          ),
-          IconButton(
             tooltip: 'Run hardware check again',
             onPressed: _checking ? null : _runAutomaticCheck,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: _checking
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 14),
-                  Text('Checking Windows devices and Event Viewer...'),
-                ],
-              ),
-            )
-          : Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 820),
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    Text(
-                      widget.studentEmail,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text('PC ${widget.pcNumber} • Room ${widget.room}'),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'The system filled these values automatically. Double-check the devices you can physically confirm before submitting.',
-                    ),
-                    const SizedBox(height: 12),
-                    _conditionTile('Mouse', mouseOk, (v) => mouseOk = v),
-                    _conditionTile('Keyboard', keyboardOk, (v) => keyboardOk = v),
-                    _conditionTile('Monitor', monitorOk, (v) => monitorOk = v),
-                    _conditionTile(
-                      'Ethernet / LAN connection',
-                      networkOk,
-                      (v) => networkOk = v,
-                    ),
-                    if (_suggestions.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Suggested checks',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      ..._suggestions.map(
-                        (tip) => ListTile(
-                          leading: const Icon(Icons.tips_and_updates),
-                          title: Text(tip),
-                        ),
-                      ),
+      body: Stack(
+        children: [
+          _checking
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 14),
+                      Text('Checking Windows devices and Event Viewer...'),
                     ],
-                    if (_warnings.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      const Card(
-                        child: ListTile(
-                          leading: Icon(Icons.health_and_safety),
-                          title: Text('System health checked automatically'),
-                          subtitle: Text(
-                            'CPU, RAM, and disk health are recorded for ITSO monitoring and do not need student confirmation.',
+                  ),
+                )
+              : Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        Text(
+                          widget.studentEmail,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        Text('PC ${widget.pcNumber} • Room ${widget.room}'),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'The system filled these values automatically. Double-check the devices you can physically confirm before submitting.',
+                        ),
+                        const SizedBox(height: 12),
+                        _conditionTile('Mouse', mouseOk, (v) => mouseOk = v),
+                        _conditionTile('Keyboard', keyboardOk, (v) => keyboardOk = v),
+                        _conditionTile('Monitor', monitorOk, (v) => monitorOk = v),
+                        _conditionTile(
+                          'Ethernet / LAN connection',
+                          networkOk,
+                          (v) => networkOk = v,
+                        ),
+                        if (_suggestions.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Suggested checks',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          ..._suggestions.map(
+                            (tip) => ListTile(
+                              leading: const Icon(Icons.tips_and_updates),
+                              title: Text(tip),
+                            ),
+                          ),
+                        ],
+                        if (_warnings.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const Card(
+                            child: ListTile(
+                              leading: Icon(Icons.health_and_safety),
+                              title: Text('System health checked automatically'),
+                              subtitle: Text(
+                                'CPU, RAM, and disk health are recorded for ITSO monitoring and do not need student confirmation.',
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _descriptionController,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: 'Additional issue description',
+                            border: OutlineInputBorder(),
                           ),
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _descriptionController,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Additional issue description',
-                        border: OutlineInputBorder(),
-                      ),
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          onPressed: _submitting ? null : _submit,
+                          icon: const Icon(Icons.save),
+                          label: Text(
+                            _submitting ? 'Saving...' : 'Submit and Continue',
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 18),
-                    FilledButton.icon(
-                      onPressed: _submitting ? null : _submit,
-                      icon: const Icon(Icons.save),
-                      label: Text(
-                        _submitting ? 'Saving...' : 'Submit and Continue',
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: _buildThemeToggle(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => ThemeService.instance.toggleTheme(),
+        icon: Icon(
+          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          color: isDark ? Colors.amber : Colors.blue,
+        ),
+        tooltip: 'Toggle Light/Dark Mode',
+      ),
     );
   }
 }

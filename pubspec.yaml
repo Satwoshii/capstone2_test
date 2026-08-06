@@ -37,4 +37,5 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/
+    - assets/tray/app_icon.ico
+    - assets/tray/SysWatch_Logo.png

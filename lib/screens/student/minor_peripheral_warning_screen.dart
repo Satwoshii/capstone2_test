@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../models/hardware_status.dart';
 import '../../models/pc_identity.dart';
+import '../../services/theme_service.dart';
 import '../../widgets/issue_support_launcher.dart';
 
 class MinorPeripheralWarningScreen extends StatefulWidget {
   final PcIdentity pc;
   final HardwareStatus hardware;
   final bool sessionActive;
-  final bool isDarkMode;
   final Future<void> Function()? onContinueInBackground;
 
   const MinorPeripheralWarningScreen({
@@ -16,7 +16,6 @@ class MinorPeripheralWarningScreen extends StatefulWidget {
     required this.pc,
     required this.hardware,
     required this.sessionActive,
-    this.isDarkMode = true,
     this.onContinueInBackground,
   });
 
@@ -34,14 +33,14 @@ class _MinorPeripheralWarningScreenState
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _pulseAnim;
 
-  bool get _dark => widget.isDarkMode;
+  bool get _dark => Theme.of(context).brightness == Brightness.dark;
 
   Color get _bgColor    => _dark ? const Color(0xFF090A0E) : const Color(0xFFF0F2F5);
   Color get _cardColor  => _dark ? const Color(0xFF13141A) : Colors.white;
   Color get _fieldColor => _dark ? const Color(0xFF1C1E26) : const Color(0xFFEDF0F5);
   Color get _textColor  => _dark ? Colors.white : const Color(0xFF1A1C1E);
   Color get _borderCol  =>
-      _dark ? const Color(0x12FFFFFF) : Colors.black.withOpacity(0.09);
+      _dark ? const Color(0x12FFFFFF) : Colors.black.withValues(alpha: 0.09);
 
   static const Color _warnA = Color(0xFFF5A623);
   static const Color _warnB = Color(0xFFFF6B35);
@@ -118,8 +117,38 @@ class _MinorPeripheralWarningScreenState
                 ),
               ),
             ),
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: _buildThemeToggle(),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _cardColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: _borderCol),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: _dark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => ThemeService.instance.toggleTheme(),
+        icon: Icon(
+          _dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          color: _dark ? Colors.amber : const Color(0xFFFF6B35),
+        ),
+        tooltip: 'Toggle Theme',
       ),
     );
   }
@@ -128,8 +157,8 @@ class _MinorPeripheralWarningScreenState
     return IgnorePointer(
       child: Stack(
         children: [
-          Positioned(top: -90,  left:  -70, child: _orb(320, _warnA.withOpacity(0.07))),
-          Positioned(bottom: -110, right: -60, child: _orb(360, _warnB.withOpacity(0.06))),
+          Positioned(top: -90,  left:  -70, child: _orb(320, _warnA.withValues(alpha: 0.07))),
+          Positioned(bottom: -110, right: -60, child: _orb(360, _warnB.withValues(alpha: 0.06))),
         ],
       ),
     );
@@ -153,7 +182,7 @@ class _MinorPeripheralWarningScreenState
         border: Border.all(color: _borderCol),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(_dark ? 0.55 : 0.10),
+            color: Colors.black.withValues(alpha: _dark ? 0.55 : 0.10),
             blurRadius: 64,
             offset: const Offset(0, 28),
           ),
@@ -187,7 +216,7 @@ class _MinorPeripheralWarningScreenState
                 ? 'Your session remains active. SysWatch will keep checking the device in the background.'
                 : 'You may continue to student authentication. SysWatch will keep checking the device.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: _textColor.withOpacity(0.70), fontSize: 14.5, height: 1.55),
+            style: TextStyle(color: _textColor.withValues(alpha: 0.70), fontSize: 14.5, height: 1.55),
           ),
           const SizedBox(height: 24),
           ..._tips.map(_buildTipTile),
@@ -196,14 +225,14 @@ class _MinorPeripheralWarningScreenState
           const SizedBox(height: 20),
           Text(
             '${widget.pc.roomName}  ·  ${widget.pc.pcId}',
-            style: TextStyle(color: _textColor.withOpacity(0.30), fontSize: 12, letterSpacing: 0.4),
+            style: TextStyle(color: _textColor.withValues(alpha: 0.30), fontSize: 12, letterSpacing: 0.4),
           ),
           if (widget.sessionActive) ...[
             const SizedBox(height: 16),
             const IssueSupportLauncher(compact: true),
           ],
           const SizedBox(height: 24),
-          Divider(color: _textColor.withOpacity(0.08), thickness: 1),
+          Divider(color: _textColor.withValues(alpha: 0.08), thickness: 1),
           const SizedBox(height: 20),
           _buildContinueButton(),
         ],
@@ -225,8 +254,8 @@ class _MinorPeripheralWarningScreenState
                 width: 104, height: 104,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: _warnA.withOpacity(0.28), width: 1.5),
-                  boxShadow: [BoxShadow(color: _warnA.withOpacity(0.18), blurRadius: 28, spreadRadius: 4)],
+                  border: Border.all(color: _warnA.withValues(alpha: 0.28), width: 1.5),
+                  boxShadow: [BoxShadow(color: _warnA.withValues(alpha: 0.18), blurRadius: 28, spreadRadius: 4)],
                 ),
               ),
             ),
@@ -235,10 +264,10 @@ class _MinorPeripheralWarningScreenState
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [_warnA.withOpacity(0.18), _warnB.withOpacity(0.12)],
+                  colors: [_warnA.withValues(alpha: 0.18), _warnB.withValues(alpha: 0.12)],
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
-                border: Border.all(color: _warnA.withOpacity(0.55), width: 2),
+                border: Border.all(color: _warnA.withValues(alpha: 0.55), width: 2),
               ),
             ),
             ShaderMask(
@@ -268,8 +297,8 @@ class _MinorPeripheralWarningScreenState
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            color: _warnA.withOpacity(0.10),
-            border: Border.all(color: _warnA.withOpacity(0.30)),
+            color: _warnA.withValues(alpha: 0.10),
+            border: Border.all(color: _warnA.withValues(alpha: 0.30)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -304,7 +333,7 @@ class _MinorPeripheralWarningScreenState
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(9),
                 gradient: LinearGradient(
-                  colors: [_warnA.withOpacity(0.15), _warnB.withOpacity(0.10)],
+                  colors: [_warnA.withValues(alpha: 0.15), _warnB.withValues(alpha: 0.10)],
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
               ),
@@ -314,7 +343,7 @@ class _MinorPeripheralWarningScreenState
             Expanded(
               child: Text(
                 tip.text,
-                style: TextStyle(color: _textColor.withOpacity(0.80), fontSize: 13.5, height: 1.4),
+                style: TextStyle(color: _textColor.withValues(alpha: 0.80), fontSize: 13.5, height: 1.4),
               ),
             ),
           ],
@@ -334,11 +363,11 @@ class _MinorPeripheralWarningScreenState
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.monitor_heart_rounded, color: _warnA.withOpacity(0.75), size: 16),
+          Icon(Icons.monitor_heart_rounded, color: _warnA.withValues(alpha: 0.75), size: 16),
           const SizedBox(width: 9),
           Text(
             'Automatic recovery check runs every 10 seconds',
-            style: TextStyle(color: _textColor.withOpacity(0.50), fontSize: 13),
+            style: TextStyle(color: _textColor.withValues(alpha: 0.50), fontSize: 13),
           ),
         ],
       ),
@@ -355,7 +384,7 @@ class _MinorPeripheralWarningScreenState
             begin: Alignment.centerLeft, end: Alignment.centerRight,
           ),
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: _warnA.withOpacity(0.28), blurRadius: 16, offset: const Offset(0, 5))],
+          boxShadow: [BoxShadow(color: _warnA.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 5))],
         ),
         child: ElevatedButton.icon(
           onPressed: () => _continue(context),
