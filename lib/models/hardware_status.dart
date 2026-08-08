@@ -45,27 +45,27 @@ class HardwareStatus {
   List<String> get minorIssues {
     final failed = <String>[];
 
-    if (!mouseOk) failed.add('Mouse');
-    if (!keyboardOk) failed.add('Keyboard');
-    if (!monitorOk) failed.add('Monitor');
+    if (!mouseOk) failed.add('mouse');
+    if (!keyboardOk) failed.add('keyboard');
+    if (!monitorOk) failed.add('monitor');
 
     return failed;
   }
 
   List<String> get highIssues {
     return [
-      if (!networkOk) 'Ethernet',
+      if (!networkOk) 'ethernet',
     ];
   }
 
   List<String> get criticalIssues {
     final failed = <String>[];
 
-    if (!cpuOk) failed.add('CPU');
-    if (!ramOk) failed.add('RAM');
-    if (!diskOk) failed.add('Disk');
-    if (!storageHealthOk) failed.add('Storage Health');
-    if (!storageCapacityOk) failed.add('Storage Capacity');
+    if (!cpuOk) failed.add('cpu');
+    if (!ramOk) failed.add('ram');
+    if (!diskOk) failed.add('disk');
+    if (!storageHealthOk) failed.add('storage health');
+    if (!storageCapacityOk) failed.add('storage capacity');
 
     return failed;
   }
@@ -93,16 +93,16 @@ class HardwareStatus {
   bool get hasBlockingIssue => hasHighIssue || hasCriticalIssue;
 
   String get severity {
-    if (hasCriticalIssue) return 'Critical';
-    if (hasHighIssue) return 'High';
-    if (hasMinorIssue) return 'Minor';
-    return 'Normal';
+    if (hasCriticalIssue) return 'critical';
+    if (hasHighIssue) return 'high';
+    if (hasMinorIssue) return 'minor';
+    return 'normal';
   }
 
   String get pcStatus {
-    if (hasBlockingIssue) return 'Broken';
-    if (hasMinorIssue) return 'Minor';
-    return 'Online';
+    if (hasBlockingIssue) return 'broken';
+    if (hasMinorIssue) return 'minor';
+    return 'online';
   }
 
   Map<String, dynamic> toMap() {

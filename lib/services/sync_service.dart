@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
 import 'app_config_service.dart';
-import 'auth_service.dart';
 import 'local_db_service.dart';
 import 'support_chat_service.dart';
 import 'workstation_registry_service.dart';
@@ -130,14 +129,7 @@ class SyncService {
         await WorkstationRegistryService.instance.updateHeartbeat(pc, status);
       }
 
-      String? refreshError;
-      try {
-        await AuthService.refreshOfflineStudents();
-      } catch (error) {
-        refreshError = 'Offline account refresh delayed: $error';
-      }
-
-      lastError.value = refreshError;
+      lastError.value = null;
       await refreshPendingCount();
     } catch (error) {
       lastError.value = error.toString();

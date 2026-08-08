@@ -46,7 +46,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   Color get _subTextColor =>
       _isDarkMode ? Colors.white54 : Colors.black45;
   Color get _borderColor =>
-      _isDarkMode ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.09);
+      _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.09);
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -120,6 +120,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
           ),
         ),
       );
+    } on ActiveStudentSessionException catch (error) {
+      if (mounted) {
+        await _showActiveSessionAlert(error);
+      }
     } catch (error) {
       _showError(error.toString());
     } finally {
@@ -128,6 +132,36 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
         shortcutFocusNode.requestFocus();
       }
     }
+  }
+
+  Future<void> _showActiveSessionAlert(
+    ActiveStudentSessionException error,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.phonelink_lock_rounded,
+          color: Colors.orange,
+          size: 36,
+        ),
+        title: const Text('Account Currently in Use'),
+        content: Text(
+          'This student account is already active on ${error.location}.\n\n'
+          'Log out from that workstation before switching to this PC. If you '
+          'did not start that session, contact your instructor or '
+          'administrator.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -175,7 +209,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: _subTextColor, fontSize: 14),
-      prefixIcon: Icon(icon, color: _subTextColor.withValues(alpha: 0.45), size: 20),
+      prefixIcon: Icon(icon, color: _subTextColor.withOpacity(0.45), size: 20),
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: _fieldColor,

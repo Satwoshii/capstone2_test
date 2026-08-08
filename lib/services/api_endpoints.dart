@@ -4,8 +4,12 @@ class ApiEndpoints {
   static const String health = 'health.php';
 
   static const String studentLogin = 'auth/student_login.php';
+  static const String studentLogout = 'auth/student_logout.php';
   static const String staffLogin = 'auth/staff_login.php';
   static const String offlineStudents = 'accounts/offline_students.php';
+
+  static const String studentSessionHeartbeat =
+      'student_sessions/heartbeat.php';
 
   static const String registerWorkstation = 'workstations/register.php';
   static const String workstationHeartbeat = 'workstations/heartbeat.php';

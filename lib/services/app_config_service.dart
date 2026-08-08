@@ -148,9 +148,11 @@ class AppConfigService {
   Future<void> saveStudentApiSession({
     required AppUser user,
     required String apiToken,
+    required String sessionId,
     String? expiresAt,
   }) async {
     await LocalDbService.instance.setConfig('studentApiToken', apiToken);
+    await LocalDbService.instance.setConfig('studentSessionId', sessionId);
     await LocalDbService.instance.setConfig('studentTokenUid', user.uid);
     await LocalDbService.instance.setConfig(
       'studentTokenExpiresAt',
@@ -174,6 +176,10 @@ class AppConfigService {
     return await LocalDbService.instance.getConfig('studentTokenUid') ?? '';
   }
 
+  Future<String> getStudentSessionId() async {
+    return await LocalDbService.instance.getConfig('studentSessionId') ?? '';
+  }
+
   Future<DateTime?> getStudentTokenExpiresAt() async {
     final value =
         await LocalDbService.instance.getConfig('studentTokenExpiresAt');
@@ -190,6 +196,7 @@ class AppConfigService {
 
   Future<void> clearStudentApiSession() async {
     await LocalDbService.instance.setConfig('studentApiToken', '');
+    await LocalDbService.instance.setConfig('studentSessionId', '');
     await LocalDbService.instance.setConfig('studentTokenUid', '');
     await LocalDbService.instance.setConfig('studentTokenExpiresAt', '');
   }

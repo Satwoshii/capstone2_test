@@ -9,6 +9,7 @@ import '../../models/pc_identity.dart';
 import '../../services/app_config_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
+import '../../services/student_session_service.dart';
 import '../../services/sync_service.dart';
 import '../../services/theme_service.dart';
 import '../../services/tray_service.dart';
@@ -36,8 +37,11 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
 
   static const int _totalSeconds = 5;
   Timer? _autoMinimizeTimer;
+  Timer? _sessionHeartbeatTimer;
   int _secondsLeft = _totalSeconds;
   bool _countdownDone = false;
+  bool _heartbeatInProgress = false;
+  bool _sessionEnding = false;
 
   // ── Animation controllers ─────────────────────────────────────────────────
   late final AnimationController _entryCtrl;
@@ -99,11 +103,13 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
 
     _entryCtrl.forward().then((_) => _checkCtrl.forward());
     _startAutoMinimizeTimer();
+    unawaited(_startSessionHeartbeat());
   }
 
   @override
   void dispose() {
     _autoMinimizeTimer?.cancel();
+    _sessionHeartbeatTimer?.cancel();
     _entryCtrl.dispose();
     _checkCtrl.dispose();
     _pulseCtrl.dispose();
@@ -130,11 +136,100 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     } catch (_) {}
   }
 
-  Future<void> _logout(BuildContext context) async {
+  Future<void> _startSessionHeartbeat() async {
+    await _sendSessionHeartbeat();
+    if (!mounted || _sessionEnding) return;
+
+    _sessionHeartbeatTimer?.cancel();
+    _sessionHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => unawaited(_sendSessionHeartbeat()),
+    );
+  }
+
+  Future<void> _sendSessionHeartbeat() async {
+    if (_heartbeatInProgress || _sessionEnding) return;
+    _heartbeatInProgress = true;
+
+    try {
+      await StudentSessionService.instance.heartbeat();
+    } on StudentSessionInvalidException catch (error) {
+      await _endInvalidSession(error.message);
+    } catch (_) {
+      // A short LAN interruption is allowed. The server keeps the session for
+      // 90 seconds and rejects it if another PC becomes the valid session.
+    } finally {
+      _heartbeatInProgress = false;
+    }
+  }
+
+  Future<void> _endInvalidSession(String reason) async {
+    if (_sessionEnding) return;
+    _sessionEnding = true;
     _autoMinimizeTimer?.cancel();
+    _sessionHeartbeatTimer?.cancel();
+
+    await LocalDbService.instance.logout(widget.loginLogId);
+    try {
+      await SyncService.instance.syncPendingData();
+    } catch (_) {}
+    try {
+      await StudentSessionService.instance.logout();
+    } catch (_) {}
+    await AppConfigService.instance.clearStudentApiSession();
+    PcMonitorService.instance.endStudentSession();
+
+    try {
+      await TrayService.instance.showFromTray();
+      await windowManager.setFullScreen(true);
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.security_update_warning_rounded,
+          color: Colors.orange,
+          size: 36,
+        ),
+        title: const Text('Student Session Ended'),
+        content: Text(
+          '$reason\n\nFor security, this PC returned to the login screen.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Return to Login'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const StudentLoginScreen()),
+      (_) => false,
+    );
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    if (_sessionEnding) return;
+    _sessionEnding = true;
+    _autoMinimizeTimer?.cancel();
+    _sessionHeartbeatTimer?.cancel();
 
     await LocalDbService.instance.logout(widget.loginLogId);
     await SyncService.instance.syncPendingData();
+    try {
+      await StudentSessionService.instance.logout();
+    } catch (_) {
+      // If the LAN is down, the server releases the session automatically
+      // after its 90-second heartbeat timeout.
+    }
     await AppConfigService.instance.clearStudentApiSession();
     PcMonitorService.instance.endStudentSession();
 
@@ -647,7 +742,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     return SizedBox(
       height: 50,
       child: OutlinedButton.icon(
-        onPressed: () => _logout(context),
+        onPressed: _sessionEnding ? null : () => _logout(context),
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.redAccent.shade100,
           side: BorderSide(color: Colors.redAccent.withOpacity(0.35), width: 1.5),

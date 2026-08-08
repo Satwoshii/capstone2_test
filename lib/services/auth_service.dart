@@ -8,6 +8,34 @@ import 'api_endpoints.dart';
 import 'app_config_service.dart';
 import 'local_db_service.dart';
 
+class ActiveStudentSessionException implements Exception {
+  final String roomName;
+  final String pcId;
+  final String workstationId;
+
+  const ActiveStudentSessionException({
+    required this.roomName,
+    required this.pcId,
+    required this.workstationId,
+  });
+
+  String get location {
+    final room = roomName.trim();
+    final pc = pcId.trim();
+    if (room.isNotEmpty && pc.isNotEmpty) return 'Room $room - $pc';
+    if (pc.isNotEmpty) return pc;
+    if (room.isNotEmpty) return 'Room $room';
+    return workstationId.trim().isEmpty
+        ? 'another workstation'
+        : workstationId;
+  }
+
+  @override
+  String toString() =>
+      'This account is currently active on $location. Log out from that '
+      'workstation before signing in here.';
+}
+
 class AuthService {
   AuthService._();
 
@@ -35,13 +63,19 @@ class AuthService {
       );
 
       final userMap = _extractUserMap(response);
-      final user = AppUser.fromJson(userMap).copyWith(
-        passwordHash: hashPassword(password),
-      );
+      final user = AppUser.fromJson(userMap);
 
       final apiToken = (response['api_token'] ?? '').toString();
       if (apiToken.isEmpty) {
         throw Exception('The server did not return a student access token.');
+      }
+
+      final sessionId = (response['session_id'] ?? '').toString();
+      if (sessionId.isEmpty) {
+        throw Exception(
+          'The server does not support secure single-session login. '
+          'Install the Syswatch v2.7.0 server update.',
+        );
       }
 
       if (!user.active) {
@@ -55,47 +89,32 @@ class AuthService {
       await AppConfigService.instance.saveStudentApiSession(
         user: user,
         apiToken: apiToken,
+        sessionId: sessionId,
         expiresAt: response['token_expires_at']?.toString(),
       );
       return user;
-    } on ApiUnavailableException {
-      return loginOffline(studentId: normalizedStudentId, password: password);
+    } on ApiUnavailableException catch (error) {
+      throw Exception(
+        '${error.message} Secure student login requires the local Syswatch '
+        'server so the account can be checked for use on another PC. Internet '
+        'access is not required.',
+      );
     } on ApiRequestException catch (error) {
-      if (error.statusCode >= 500) {
-        return loginOffline(
-          studentId: normalizedStudentId,
-          password: password,
+      if (error.code == 'active_student_session') {
+        final rawSession = error.response?['active_session'];
+        final session = rawSession is Map
+            ? rawSession.map(
+                (key, value) => MapEntry(key.toString(), value),
+              )
+            : const <String, dynamic>{};
+        throw ActiveStudentSessionException(
+          roomName: (session['room_name'] ?? '').toString(),
+          pcId: (session['pc_id'] ?? '').toString(),
+          workstationId: (session['workstation_id'] ?? '').toString(),
         );
       }
       rethrow;
     }
-  }
-
-  static Future<AppUser> loginOffline({
-    required String studentId,
-    required String password,
-  }) async {
-    // An offline login must not reuse another student's server token.
-    await AppConfigService.instance.clearStudentApiSession();
-    final user = await LocalDbService.instance.findUserByStudentId(studentId);
-
-    if (user == null) {
-      throw Exception(
-        'The intranet server is unavailable and this student account is not '
-        'saved for offline login.',
-      );
-    }
-
-    if (user.role != 'student') {
-      throw Exception('Only student accounts can use this login.');
-    }
-
-    final passwordHash = hashPassword(password);
-    if (user.passwordHash == null || user.passwordHash != passwordHash) {
-      throw Exception('Invalid student ID or password.');
-    }
-
-    return user;
   }
 
   static Future<AppUser> loginStaff({
@@ -127,41 +146,6 @@ class AuthService {
       user.copyWith(passwordHash: hashPassword(password)),
     );
     return user;
-  }
-
-  static Future<int> refreshOfflineStudents() async {
-    final response = await ApiClient.instance.getJson(
-      ApiEndpoints.offlineStudents,
-    );
-
-    final rawUsers = response['users'] ?? response['data'];
-    if (rawUsers is! List) {
-      throw Exception(
-        'The server response does not contain an offline student list.',
-      );
-    }
-
-    final users = <AppUser>[];
-    for (final item in rawUsers) {
-      if (item is! Map) continue;
-      final mapped = item.map((key, value) => MapEntry(key.toString(), value));
-      final user = AppUser.fromJson(mapped);
-
-      if (user.role != 'student' || !user.active) continue;
-      if (user.studentId == null || user.studentId!.trim().isEmpty) continue;
-      if (user.passwordHash == null || user.passwordHash!.trim().isEmpty) {
-        continue;
-      }
-
-      users.add(user);
-    }
-
-    await LocalDbService.instance.upsertUsers(users);
-    await LocalDbService.instance.setConfig(
-      'lastUserSyncAt',
-      DateTime.now().toUtc().toIso8601String(),
-    );
-    return users.length;
   }
 
   static Map<String, dynamic> _extractUserMap(

@@ -37,7 +37,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
   Color get _fieldColor => _dark ? const Color(0xFF1C1E26) : const Color(0xFFEDF0F5);
   Color get _textColor  => _dark ? Colors.white : const Color(0xFF1A1C1E);
   Color get _borderCol  =>
-      _dark ? const Color(0x12FFFFFF) : Colors.black.withValues(alpha: 0.09);
+      _dark ? const Color(0x12FFFFFF) : Colors.black.withOpacity(0.09);
 
   @override
   void initState() {
@@ -137,37 +137,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
               ),
             ),
           ),
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: _buildThemeToggle(),
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildThemeToggle() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _cardColor,
-        shape: BoxShape.circle,
-        border: Border.all(color: _borderCol),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(_dark ? 0.3 : 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: IconButton(
-        onPressed: () => ThemeService.instance.toggleTheme(),
-        icon: Icon(
-          _dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-          color: _dark ? Colors.amber : _accB,
-        ),
-        tooltip: 'Toggle Light/Dark Mode',
       ),
     );
   }
@@ -190,6 +160,11 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
       ),
       iconTheme: IconThemeData(color: _textColor.withOpacity(0.85)),
       actions: [
+        IconButton(
+          onPressed: () => ThemeService.instance.toggleTheme(),
+          icon: Icon(_dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+          tooltip: 'Toggle Theme',
+        ),
         IconButton(
           tooltip: 'Refresh',
           onPressed: _refreshing ? null : _refresh,
