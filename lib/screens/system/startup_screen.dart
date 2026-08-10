@@ -241,7 +241,7 @@ class _StartupScreenState extends State<StartupScreen>
           const SizedBox(height: 36),
           _buildProgressBar(),
           const SizedBox(height: 16),
-          _buildStepDots(),
+          _buildChip(),
           const SizedBox(height: 14),
 
           AnimatedSwitcher(
@@ -272,6 +272,7 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
+  // ── Top logo (original image-based, pulsing) ───────────────────────────────
   Widget _buildPulsingLogo() {
     return SizedBox(
       width: 130,
@@ -351,6 +352,123 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
+  // ── Chip fill indicator (replaces the step dots row) ───────────────────────
+  Widget _buildChip() {
+    return AnimatedBuilder(
+      animation: _progressCtrl,
+      builder: (context, _) {
+        final fill = _progressCtrl.value.clamp(0.0, 1.0);
+        const chipSize = 40.0;
+        const pinLength = 6.0;
+        const pinThickness = 3.2;
+        final pinColor = _accentA.withOpacity(0.55 + 0.35 * fill);
+
+        Widget pinsRow({required Axis axis}) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(3, (i) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                width: axis == Axis.horizontal ? pinThickness : pinLength,
+                height: axis == Axis.horizontal ? pinLength : pinThickness,
+                decoration: BoxDecoration(
+                  color: pinColor,
+                  borderRadius: BorderRadius.circular(1.2),
+                ),
+              );
+            }),
+          );
+        }
+
+        return SizedBox(
+          width: chipSize + pinLength * 2,
+          height: chipSize + pinLength * 2,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(top: 0, child: pinsRow(axis: Axis.vertical)),
+              Positioned(bottom: 0, child: pinsRow(axis: Axis.vertical)),
+              Positioned(
+                left: 0,
+                child: RotatedBox(quarterTurns: 1, child: pinsRow(axis: Axis.horizontal)),
+              ),
+              Positioned(
+                right: 0,
+                child: RotatedBox(quarterTurns: 1, child: pinsRow(axis: Axis.horizontal)),
+              ),
+
+              // chip body
+              Container(
+                width: chipSize,
+                height: chipSize,
+                decoration: BoxDecoration(
+                  color: _isDarkMode ? const Color(0xFF0D0F14) : Colors.white,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: _accentA.withOpacity(0.45), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accentA.withOpacity(0.18 + 0.22 * fill),
+                      blurRadius: 14,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Stack(
+                    children: [
+                      // rising fill
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: FractionallySizedBox(
+                          heightFactor: fill.clamp(0.02, 1.0),
+                          widthFactor: 1,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [_accentA, _accentB.withOpacity(0.85)],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // faint circuit etching
+                      Opacity(
+                        opacity: 0.35,
+                        child: CustomPaint(
+                          size: const Size(chipSize, chipSize),
+                          painter: _CircuitPainter(
+                            color: _isDarkMode ? Colors.white : Colors.black,
+                          ),
+                        ),
+                      ),
+                      // percentage readout
+                      Center(
+                        child: Text(
+                          '${(fill * 100).round()}%',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                            color: fill > 0.45
+                                ? (_isDarkMode ? Colors.black87 : Colors.white)
+                                : (_isDarkMode ? Colors.white70 : Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildProgressBar() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -386,31 +504,36 @@ class _StartupScreenState extends State<StartupScreen>
       ),
     );
   }
+}
 
-  Widget _buildStepDots() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_steps.length, (i) {
-        final isActive = i <= _stepIndex;
-        final isCurrent = i == _stepIndex;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOut,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: isCurrent ? 20 : 7,
-          height: 7,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            gradient: isActive
-                ? LinearGradient(colors: [_accentA, _accentB])
-                : null,
-            color: isActive ? null : (_isDarkMode ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.1)),
-            boxShadow: isCurrent
-                ? [const BoxShadow(color: Color(0x402EE6C5), blurRadius: 8)]
-                : [],
-          ),
-        );
-      }),
-    );
+// ── Circuit etching painter for the chip body ─────────────────────────────────
+class _CircuitPainter extends CustomPainter {
+  final Color color;
+  _CircuitPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = color.withOpacity(0.5)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    final dot = Paint()..color = color.withOpacity(0.5);
+
+    final w = size.width;
+    final h = size.height;
+
+    canvas.drawLine(Offset(w * 0.2, 0), Offset(w * 0.2, h * 0.3), line);
+    canvas.drawLine(Offset(w * 0.8, h), Offset(w * 0.8, h * 0.7), line);
+    canvas.drawLine(Offset(0, h * 0.65), Offset(w * 0.3, h * 0.65), line);
+    canvas.drawLine(Offset(w * 0.7, h * 0.35), Offset(w, h * 0.35), line);
+
+    canvas.drawCircle(Offset(w * 0.2, h * 0.3), 1.2, dot);
+    canvas.drawCircle(Offset(w * 0.8, h * 0.7), 1.2, dot);
+    canvas.drawCircle(Offset(w * 0.3, h * 0.65), 1.2, dot);
+    canvas.drawCircle(Offset(w * 0.7, h * 0.35), 1.2, dot);
   }
+
+  @override
+  bool shouldRepaint(covariant _CircuitPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
