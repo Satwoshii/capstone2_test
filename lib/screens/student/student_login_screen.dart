@@ -5,7 +5,6 @@ import '../../services/app_config_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
-import '../../services/sync_service.dart';
 import '../../services/theme_service.dart';
 import '../staff/pc_config_admin_login_screen.dart';
 import 'student_access_screen.dart';
@@ -106,7 +105,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
         pc: pc,
       );
 
-      await SyncService.instance.syncPendingData();
       if (!mounted) return;
 
       PcMonitorService.instance.beginStudentSession(user.email);

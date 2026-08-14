@@ -42,6 +42,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
   bool _countdownDone = false;
   bool _heartbeatInProgress = false;
   bool _sessionEnding = false;
+  bool _sessionConfirmed = false;
 
   // ── Animation controllers ─────────────────────────────────────────────────
   late final AnimationController _entryCtrl;
@@ -137,8 +138,25 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
   }
 
   Future<void> _startSessionHeartbeat() async {
-    await _sendSessionHeartbeat();
+    // Give the login request and local session save time to settle before the
+    // first validation. Some MariaDB/XAMPP installations briefly expose the
+    // previous active-session row immediately after login.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+    for (var attempt = 0; attempt < 3 && mounted; attempt++) {
+      final confirmed = await _sendSessionHeartbeat(
+        allowInvalidRetry: attempt < 2,
+      );
+      if (confirmed || _sessionEnding) break;
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+
     if (!mounted || _sessionEnding) return;
+
+    // Sync the local login log only after the server has confirmed that this
+    // exact session is active. This prevents login-log synchronization from
+    // racing the initial active-session check.
+    unawaited(SyncService.instance.syncPendingData());
 
     _sessionHeartbeatTimer?.cancel();
     _sessionHeartbeatTimer = Timer.periodic(
@@ -147,17 +165,23 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     );
   }
 
-  Future<void> _sendSessionHeartbeat() async {
-    if (_heartbeatInProgress || _sessionEnding) return;
+  Future<bool> _sendSessionHeartbeat({bool allowInvalidRetry = false}) async {
+    if (_heartbeatInProgress || _sessionEnding) return false;
     _heartbeatInProgress = true;
 
     try {
       await StudentSessionService.instance.heartbeat();
+      _sessionConfirmed = true;
+      return true;
     } on StudentSessionInvalidException catch (error) {
-      await _endInvalidSession(error.message);
+      if (!allowInvalidRetry || _sessionConfirmed) {
+        await _endInvalidSession(error.message);
+      }
+      return false;
     } catch (_) {
       // A short LAN interruption is allowed. The server keeps the session for
       // 90 seconds and rejects it if another PC becomes the valid session.
+      return false;
     } finally {
       _heartbeatInProgress = false;
     }

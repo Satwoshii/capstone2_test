@@ -28,7 +28,7 @@ class StudentSessionService {
       await ApiClient.instance.postJson(
         ApiEndpoints.studentSessionHeartbeat,
         includeStudentToken: true,
-        body: {'session_id': sessionId},
+        body: {'session_id': sessionId.trim()},
       );
     } on ApiRequestException catch (error) {
       if (error.statusCode == 401 ||
@@ -49,7 +49,7 @@ class StudentSessionService {
     await ApiClient.instance.postJson(
       ApiEndpoints.studentLogout,
       includeStudentToken: true,
-      body: {'session_id': sessionId},
+      body: {'session_id': sessionId.trim()},
     );
   }
 }

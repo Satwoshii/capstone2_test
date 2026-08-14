@@ -65,12 +65,12 @@ class AuthService {
       final userMap = _extractUserMap(response);
       final user = AppUser.fromJson(userMap);
 
-      final apiToken = (response['api_token'] ?? '').toString();
+      final apiToken = (response['api_token'] ?? '').toString().trim();
       if (apiToken.isEmpty) {
         throw Exception('The server did not return a student access token.');
       }
 
-      final sessionId = (response['session_id'] ?? '').toString();
+      final sessionId = (response['session_id'] ?? '').toString().trim();
       if (sessionId.isEmpty) {
         throw Exception(
           'The server does not support secure single-session login. '

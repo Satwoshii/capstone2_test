@@ -195,11 +195,30 @@ class ApiClient {
   }
 
   Map<String, dynamic> _decodeResponse(String rawBody) {
-    if (rawBody.trim().isEmpty) {
+    final body = rawBody.replaceFirst('\uFEFF', '').trim();
+    if (body.isEmpty) {
       return <String, dynamic>{'success': true};
     }
 
-    final decoded = jsonDecode(rawBody);
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on FormatException {
+      // PHP can prepend an HTML warning (for example "<br /> <b>Warning")
+      // before an otherwise valid JSON response when display_errors is on.
+      // Recover the JSON object so optional features such as linking an active
+      // PC issue continue to work, while still rejecting an HTML-only reply.
+      final jsonStart = body.indexOf('{');
+      final jsonEnd = body.lastIndexOf('}');
+      if (jsonStart < 0 || jsonEnd <= jsonStart) {
+        throw const FormatException(
+          'The Syswatch PHP endpoint returned HTML instead of JSON. '
+          'Check the server PHP error log.',
+        );
+      }
+      decoded = jsonDecode(body.substring(jsonStart, jsonEnd + 1));
+    }
+
     if (decoded is Map<String, dynamic>) return decoded;
     if (decoded is Map) {
       return decoded.map(
