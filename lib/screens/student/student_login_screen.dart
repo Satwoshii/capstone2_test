@@ -382,6 +382,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
           TextField(
             controller: passwordController,
             obscureText: _obscurePassword,
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(
+                AuthService.maximumStudentPasswordLength,
+              ),
+            ],
             style: TextStyle(color: _textColor, fontSize: 15),
             cursorColor: _accentA,
             decoration: _fieldDecoration(

@@ -39,6 +39,9 @@ class ActiveStudentSessionException implements Exception {
 class AuthService {
   AuthService._();
 
+  static const int minimumStudentPasswordLength = 8;
+  static const int maximumStudentPasswordLength = 64;
+
   static String hashPassword(String password) {
     return sha256.convert(utf8.encode(password)).toString();
   }
@@ -51,6 +54,12 @@ class AuthService {
 
     if (normalizedStudentId.isEmpty || password.isEmpty) {
       throw Exception('Enter your student ID and password.');
+    }
+
+    final passwordLength = password.runes.length;
+    if (passwordLength < minimumStudentPasswordLength ||
+        passwordLength > maximumStudentPasswordLength) {
+      throw Exception('Password must contain between 8 and 64 characters.');
     }
 
     try {
