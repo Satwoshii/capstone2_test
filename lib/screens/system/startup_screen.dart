@@ -1,15 +1,8 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../services/pc_monitor_service.dart';
 import '../student/student_login_screen.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SETUP NOTE
-// Add the SysWatch logo to your pubspec.yaml under flutter > assets:
-//   assets:
-//     - assets/images/syswatch_logo.png
-// Copy attached_assets/image_1785934598393.png → assets/images/syswatch_logo.png
-// ─────────────────────────────────────────────────────────────────────────────
 
 class StartupScreen extends StatefulWidget {
   const StartupScreen({super.key});
@@ -36,11 +29,13 @@ class _StartupScreenState extends State<StartupScreen>
   late final AnimationController _pulseCtrl;
   late final AnimationController _entryCtrl;
   late final AnimationController _progressCtrl;
+  late final AnimationController _morphCtrl;
 
   late final Animation<double> _pulseAnim;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _glowAnim;
+  late final Animation<double> _morphAnim;
 
   // ── Palette ──────────────────────────────────────────────────────────────
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
@@ -85,6 +80,13 @@ class _StartupScreenState extends State<StartupScreen>
       duration: const Duration(milliseconds: 400),
     );
 
+    // Continuously morphs the logo glyph back and forth: 0 = monitor, 1 = chip.
+    _morphCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    )..repeat(reverse: true);
+    _morphAnim = CurvedAnimation(parent: _morphCtrl, curve: Curves.easeInOutCubic);
+
     _entryCtrl.forward();
     _boot();
   }
@@ -94,6 +96,7 @@ class _StartupScreenState extends State<StartupScreen>
     _pulseCtrl.dispose();
     _entryCtrl.dispose();
     _progressCtrl.dispose();
+    _morphCtrl.dispose();
     super.dispose();
   }
 
@@ -239,10 +242,10 @@ class _StartupScreenState extends State<StartupScreen>
           ),
 
           const SizedBox(height: 36),
-          _buildProgressBar(),
+          _buildProgressLine(),
+          const SizedBox(height: 10),
+          _buildProgressPercent(),
           const SizedBox(height: 16),
-          _buildChip(),
-          const SizedBox(height: 14),
 
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
@@ -272,7 +275,7 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  // ── Top logo (original image-based, pulsing) ───────────────────────────────
+  // ── Top logo (pulsing ring + morphing monitor⇄chip glyph) ──────────────────
   Widget _buildPulsingLogo() {
     return SizedBox(
       width: 130,
@@ -327,20 +330,19 @@ class _StartupScreenState extends State<StartupScreen>
                 child: SizedBox(
                   width: 78,
                   height: 78,
-                  child: Image.asset(
-                    'assets/images/syswatch_logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => ShaderMask(
-                      shaderCallback: (b) => LinearGradient(
-                        colors: [_accentA, _accentB],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(b),
-                      child: const Icon(
-                        Icons.monitor_rounded,
-                        color: Colors.white,
-                        size: 38,
-                      ),
+                  child: Center(
+                    child: AnimatedBuilder(
+                      animation: _morphAnim,
+                      builder: (context, _) {
+                        return CustomPaint(
+                          size: const Size(48, 48),
+                          painter: _LogoMorphPainter(
+                            t: _morphAnim.value,
+                            colorA: _accentA,
+                            colorB: _accentB,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -352,111 +354,42 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  // ── Chip fill indicator (replaces the step dots row) ───────────────────────
-  Widget _buildChip() {
+  // ── Progress line ───────────────────────────────────────────────────────
+  Widget _buildProgressLine() {
     return AnimatedBuilder(
       animation: _progressCtrl,
       builder: (context, _) {
         final fill = _progressCtrl.value.clamp(0.0, 1.0);
-        const chipSize = 40.0;
-        const pinLength = 6.0;
-        const pinThickness = 3.2;
-        final pinColor = _accentA.withOpacity(0.55 + 0.35 * fill);
-
-        Widget pinsRow({required Axis axis}) {
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(3, (i) {
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                width: axis == Axis.horizontal ? pinThickness : pinLength,
-                height: axis == Axis.horizontal ? pinLength : pinThickness,
-                decoration: BoxDecoration(
-                  color: pinColor,
-                  borderRadius: BorderRadius.circular(1.2),
-                ),
-              );
-            }),
-          );
-        }
-
         return SizedBox(
-          width: chipSize + pinLength * 2,
-          height: chipSize + pinLength * 2,
+          height: 8,
+          width: double.infinity,
           child: Stack(
-            alignment: Alignment.center,
             children: [
-              Positioned(top: 0, child: pinsRow(axis: Axis.vertical)),
-              Positioned(bottom: 0, child: pinsRow(axis: Axis.vertical)),
-              Positioned(
-                left: 0,
-                child: RotatedBox(quarterTurns: 1, child: pinsRow(axis: Axis.horizontal)),
-              ),
-              Positioned(
-                right: 0,
-                child: RotatedBox(quarterTurns: 1, child: pinsRow(axis: Axis.horizontal)),
-              ),
-
-              // chip body
+              // track
               Container(
-                width: chipSize,
-                height: chipSize,
+                height: 6,
+                margin: const EdgeInsets.symmetric(vertical: 1),
                 decoration: BoxDecoration(
-                  color: _isDarkMode ? const Color(0xFF0D0F14) : Colors.white,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: _accentA.withOpacity(0.45), width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accentA.withOpacity(0.18 + 0.22 * fill),
-                      blurRadius: 14,
-                      spreadRadius: 1,
-                    ),
-                  ],
+                  color: _isDarkMode
+                      ? Colors.white.withOpacity(0.07)
+                      : Colors.black.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: Stack(
-                    children: [
-                      // rising fill
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: FractionallySizedBox(
-                          heightFactor: fill.clamp(0.02, 1.0),
-                          widthFactor: 1,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                                colors: [_accentA, _accentB.withOpacity(0.85)],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // faint circuit etching
-                      Opacity(
-                        opacity: 0.35,
-                        child: CustomPaint(
-                          size: const Size(chipSize, chipSize),
-                          painter: _CircuitPainter(
-                            color: _isDarkMode ? Colors.white : Colors.black,
-                          ),
-                        ),
-                      ),
-                      // percentage readout
-                      Center(
-                        child: Text(
-                          '${(fill * 100).round()}%',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                            color: fill > 0.45
-                                ? (_isDarkMode ? Colors.black87 : Colors.white)
-                                : (_isDarkMode ? Colors.white70 : Colors.black87),
-                          ),
-                        ),
+              ),
+              // filled portion
+              FractionallySizedBox(
+                widthFactor: fill.clamp(0.015, 1.0),
+                child: Container(
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(vertical: 1),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: LinearGradient(colors: [_accentA, _accentB]),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _accentA.withOpacity(0.5),
+                        blurRadius: 10,
+                        spreadRadius: 0.5,
                       ),
                     ],
                   ),
@@ -469,71 +402,170 @@ class _StartupScreenState extends State<StartupScreen>
     );
   }
 
-  Widget _buildProgressBar() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        height: 5,
-        width: double.infinity,
-        child: AnimatedBuilder(
-          animation: _progressCtrl,
-          builder: (context, _) {
-            return Stack(
-              children: [
-                Container(color: _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05)),
-                FractionallySizedBox(
-                  widthFactor: _progressCtrl.value,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [_accentA, _accentB],
-                      ),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x552EE6C5),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+  Widget _buildProgressPercent() {
+    return AnimatedBuilder(
+      animation: _progressCtrl,
+      builder: (context, _) {
+        final fill = _progressCtrl.value.clamp(0.0, 1.0);
+        return Text(
+          '${(fill * 100).round()}%',
+          style: TextStyle(
+            color: _accentA,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
+        );
+      },
     );
   }
 }
 
-// ── Circuit etching painter for the chip body ─────────────────────────────────
-class _CircuitPainter extends CustomPainter {
-  final Color color;
-  _CircuitPainter({required this.color});
+// ── Morphing monitor⇄chip glyph painter ─────────────────────────────────────
+//
+// t = 0.0 → drawn as a monitor (screen + stand)
+// t = 1.0 → drawn as a CPU chip (square body + pins)
+//
+// The body outline is a single RRect whose bounds/radius are lerped between
+// the two shapes every frame, so it visually reshapes itself rather than
+// cross-fading two separate icons. The monitor's stand shrinks/fades out
+// while the chip's pins grow/fade in from the body edges at the same time.
+class _LogoMorphPainter extends CustomPainter {
+  final double t;
+  final Color colorA;
+  final Color colorB;
+
+  _LogoMorphPainter({
+    required this.t,
+    required this.colorA,
+    required this.colorB,
+  });
+
+  double _lerp(double a, double b) => ui.lerpDouble(a, b, t)!;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = color.withOpacity(0.5)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-    final dot = Paint()..color = color.withOpacity(0.5);
-
     final w = size.width;
     final h = size.height;
+    final rect = Offset.zero & size;
 
-    canvas.drawLine(Offset(w * 0.2, 0), Offset(w * 0.2, h * 0.3), line);
-    canvas.drawLine(Offset(w * 0.8, h), Offset(w * 0.8, h * 0.7), line);
-    canvas.drawLine(Offset(0, h * 0.65), Offset(w * 0.3, h * 0.65), line);
-    canvas.drawLine(Offset(w * 0.7, h * 0.35), Offset(w, h * 0.35), line);
+    final shader = LinearGradient(
+      colors: [colorA, colorB],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ).createShader(rect);
 
-    canvas.drawCircle(Offset(w * 0.2, h * 0.3), 1.2, dot);
-    canvas.drawCircle(Offset(w * 0.8, h * 0.7), 1.2, dot);
-    canvas.drawCircle(Offset(w * 0.3, h * 0.65), 1.2, dot);
-    canvas.drawCircle(Offset(w * 0.7, h * 0.35), 1.2, dot);
+    Paint strokePaint({double opacity = 1.0, double? widthOverride}) => Paint()
+      ..shader = shader
+      ..color = Colors.white.withOpacity(opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = widthOverride ?? w * 0.075
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    Paint fillPaint({double opacity = 1.0}) => Paint()
+      ..shader = shader
+      ..color = Colors.white.withOpacity(opacity)
+      ..style = PaintingStyle.fill;
+
+    // ── Morphing body: monitor screen ⇄ chip square ──────────────────────
+    final left = _lerp(w * 0.12, w * 0.27);
+    final top = _lerp(h * 0.10, h * 0.26);
+    final right = _lerp(w * 0.88, w * 0.73);
+    final bottom = _lerp(h * 0.60, h * 0.74);
+    final radius = _lerp(w * 0.16, w * 0.10);
+
+    final bodyRect = Rect.fromLTRB(left, top, right, bottom);
+    final bodyRRect = RRect.fromRectAndRadius(bodyRect, Radius.circular(radius));
+    canvas.drawRRect(bodyRRect, strokePaint());
+
+    // ── Monitor-only: stand neck + base — shrink & fade out as t → 1 ──────
+    final monitorAmt = (1 - t).clamp(0.0, 1.0);
+    if (monitorAmt > 0.01) {
+      canvas.save();
+      final standCenter = Offset(w * 0.5, h * 0.66);
+      canvas.translate(standCenter.dx, standCenter.dy);
+      canvas.scale(monitorAmt, monitorAmt);
+      canvas.translate(-standCenter.dx, -standCenter.dy);
+
+      // neck
+      final neck = Rect.fromLTWH(w * 0.44, h * 0.60, w * 0.12, h * 0.10);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(neck, Radius.circular(w * 0.02)),
+        fillPaint(opacity: monitorAmt),
+      );
+      // base
+      final base = Rect.fromCenter(
+        center: Offset(w * 0.5, h * 0.74),
+        width: w * 0.36,
+        height: h * 0.055,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(base, Radius.circular(h * 0.03)),
+        fillPaint(opacity: monitorAmt),
+      );
+      canvas.restore();
+
+      // screen "signal" line
+      final signalY = h * 0.30;
+      canvas.drawLine(
+        Offset(w * 0.28, signalY),
+        Offset(w * 0.72, signalY),
+        strokePaint(opacity: monitorAmt * 0.7, widthOverride: w * 0.035),
+      );
+    }
+
+    // ── Chip-only: pins growing out from the body edges as t → 1 ──────────
+    final chipAmt = t.clamp(0.0, 1.0);
+    if (chipAmt > 0.01) {
+      final pinLen = chipAmt * w * 0.11;
+      final pinThickness = w * 0.045;
+
+      void drawPin(Offset from, Offset direction) {
+        final to = from + direction * pinLen;
+        canvas.drawLine(
+          from,
+          to,
+          strokePaint(opacity: chipAmt, widthOverride: pinThickness),
+        );
+      }
+
+      // 3 evenly spaced pins per side, growing outward from the body edge.
+      for (final frac in [0.28, 0.5, 0.72]) {
+        // top
+        drawPin(
+          Offset(left + (right - left) * frac, top),
+          const Offset(0, -1),
+        );
+        // bottom
+        drawPin(
+          Offset(left + (right - left) * frac, bottom),
+          const Offset(0, 1),
+        );
+        // left
+        drawPin(
+          Offset(left, top + (bottom - top) * frac),
+          const Offset(-1, 0),
+        );
+        // right
+        drawPin(
+          Offset(right, top + (bottom - top) * frac),
+          const Offset(1, 0),
+        );
+      }
+
+      // center circuit dot
+      canvas.drawCircle(
+        Offset(w * 0.5, h * 0.5),
+        w * 0.035,
+        fillPaint(opacity: chipAmt),
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _CircuitPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(covariant _LogoMorphPainter oldDelegate) =>
+      oldDelegate.t != t ||
+          oldDelegate.colorA != colorA ||
+          oldDelegate.colorB != colorB;
 }
