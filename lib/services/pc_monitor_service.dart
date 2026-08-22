@@ -214,16 +214,49 @@ class PcMonitorService {
       );
       if (alreadyOpen) continue;
 
+      final eventEvidence = _eventEvidenceFor(issue, hardware);
+
       await LocalDbService.instance.insertFaultReport(
         pc: pc,
         studentEmail: _activeStudentEmail,
         issue: issue,
         details: 'Automatically detected: $issue. '
-            'Overall workstation severity: ${hardware.severity}.',
+            'Overall workstation severity: ${hardware.severity}.'
+            '${eventEvidence == null ? '' : ' $eventEvidence'}',
         severity: _severityFor([issue]),
         source: 'background_pc_monitor',
       );
     }
+  }
+
+  String? _eventEvidenceFor(String issue, HardwareStatus hardware) {
+    if (!hardware.eventViewerScanSucceeded) return null;
+
+    final expectedComponent = issue == 'disk' || issue.startsWith('storage')
+        ? 'storage'
+        : issue;
+
+    for (final event in hardware.eventDiagnostics) {
+      if (event['component']?.toString() != expectedComponent) continue;
+      final state = event['state']?.toString();
+      if (state != 'problem' && state != 'warning') continue;
+
+      final provider = event['provider']?.toString().trim() ?? '';
+      final eventId = event['eventId']?.toString().trim() ?? '';
+      final time = event['timeCreated']?.toString().trim() ?? '';
+      final message = event['message']?.toString().trim() ?? '';
+      final summary = message.length > 180
+          ? '${message.substring(0, 180)}...'
+          : message;
+
+      return 'Event Viewer evidence: '
+          '${provider.isEmpty ? 'Windows' : provider}'
+          '${eventId.isEmpty ? '' : ' event $eventId'}'
+          '${time.isEmpty ? '' : ' at $time'}'
+          '${summary.isEmpty ? '.' : ': $summary'}';
+    }
+
+    return null;
   }
 
   Future<void> _saveRecovery({

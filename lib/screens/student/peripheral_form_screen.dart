@@ -190,7 +190,9 @@ class _PeripheralFormScreenState extends State<PeripheralFormScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 14),
-                  Text('Checking Windows devices and Event Viewer...'),
+                  Text(
+                    'Checking Windows hardware and Event Viewer diagnostics...',
+                  ),
                 ],
               ),
             )

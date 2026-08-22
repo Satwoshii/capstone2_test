@@ -12,6 +12,9 @@ class HardwareStatus {
   final bool printerOk;
   final bool headsetOk;
   final List<String> issues;
+  final bool eventViewerScanSucceeded;
+  final List<Map<String, dynamic>> eventDiagnostics;
+  final Map<String, dynamic> detectionDiagnostics;
 
   HardwareStatus({
     required this.cpuOk,
@@ -27,6 +30,9 @@ class HardwareStatus {
     required this.printerOk,
     required this.headsetOk,
     required this.issues,
+    this.eventViewerScanSucceeded = false,
+    this.eventDiagnostics = const [],
+    this.detectionDiagnostics = const {},
   });
 
   bool get hasIssue => failedComponents.isNotEmpty || issues.isNotEmpty;
@@ -120,6 +126,9 @@ class HardwareStatus {
       'printerOk': printerOk,
       'headsetOk': headsetOk,
       'issues': issues,
+      'eventViewerScanSucceeded': eventViewerScanSucceeded,
+      'eventDiagnostics': eventDiagnostics,
+      'detectionDiagnostics': detectionDiagnostics,
       'peripheralIssues': peripheralIssues,
       'pcHealthIssues': pcHealthIssues,
       'minorIssues': minorIssues,
