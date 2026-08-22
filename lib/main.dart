@@ -11,6 +11,7 @@ import 'services/app_navigator.dart';
 import 'services/global_shortcut_service.dart';
 import 'services/local_db_service.dart';
 import 'services/pc_monitor_service.dart';
+import 'services/pre_login_kiosk_service.dart';
 import 'services/startup_service.dart';
 import 'services/sync_service.dart';
 import 'services/theme_service.dart';
@@ -27,6 +28,7 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfi;
 
     await windowManager.ensureInitialized();
+    await PreLoginKioskService.instance.initialize();
 
     const windowOptions = WindowOptions(
       size: Size(1100, 720),
@@ -36,11 +38,8 @@ Future<void> main() async {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.maximize();
-      await windowManager.setFullScreen(true);
       await windowManager.show();
-      await windowManager.focus();
-      await windowManager.setPreventClose(true);
+      await PreLoginKioskService.instance.lockForLogin();
     });
 
     await TrayService.instance.init();

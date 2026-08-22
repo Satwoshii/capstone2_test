@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +7,7 @@ import '../../services/app_config_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
+import '../../services/pre_login_kiosk_service.dart';
 import '../../services/theme_service.dart';
 import '../staff/pc_config_admin_login_screen.dart';
 import 'student_access_screen.dart';
@@ -51,6 +54,8 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
   @override
   void initState() {
     super.initState();
+
+    unawaited(PreLoginKioskService.instance.lockForLogin());
 
     _entryController = AnimationController(
       vsync: this,
@@ -108,6 +113,8 @@ class _StudentLoginScreenState extends State<StudentLoginScreen>
       if (!mounted) return;
 
       PcMonitorService.instance.beginStudentSession(user.email);
+      await PreLoginKioskService.instance.releaseAfterLogin();
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(

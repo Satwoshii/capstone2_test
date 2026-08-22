@@ -2,14 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/hardware_status.dart';
-import 'local_db_service.dart';
 
 class WindowsHardwareService {
   static HardwareStatus _lastReliableStatus = HardwareStatus.normal();
-  static const String _expectedKeyboardCountKey =
-      'expectedPhysicalKeyboardCount';
-  static int? _expectedKeyboardDeviceCount;
-  static bool _keyboardBaselineLoaded = false;
 
   static Future<HardwareStatus> checkHardware() async {
     if (!Platform.isWindows) {
@@ -45,7 +40,7 @@ class WindowsHardwareService {
 
       bool ok(String key) => data[key] == true;
 
-      final keyboardOk = await _resolveKeyboardStatus(data);
+      final keyboardOk = _keyboardIsConnected(data);
 
       final status = HardwareStatus(
         cpuOk: ok('cpuOk'),
@@ -83,44 +78,16 @@ class WindowsHardwareService {
     }
   }
 
-  static Future<bool> _resolveKeyboardStatus(
-    Map<String, dynamic> data,
-  ) async {
+  static bool _keyboardIsConnected(Map<String, dynamic> data) {
     final reportedCount = data['keyboardDeviceCount'];
     final keyboardDeviceCount = reportedCount is num
         ? reportedCount.toInt()
         : (data['keyboardOk'] == true ? 1 : 0);
 
-    try {
-      if (!_keyboardBaselineLoaded) {
-        final saved = await LocalDbService.instance.getConfig(
-          _expectedKeyboardCountKey,
-        );
-        _expectedKeyboardDeviceCount = int.tryParse(saved ?? '');
-        _keyboardBaselineLoaded = true;
-      }
-
-      final expected = _expectedKeyboardDeviceCount;
-
-      if (expected == null || expected <= 0) {
-        if (keyboardDeviceCount > 0) {
-          _expectedKeyboardDeviceCount = keyboardDeviceCount;
-          await LocalDbService.instance.setConfig(
-            _expectedKeyboardCountKey,
-            keyboardDeviceCount.toString(),
-          );
-        }
-
-        return keyboardDeviceCount > 0;
-      }
-
-      // Some mice and headset software expose an extra keyboard-class HID
-      // interface. Remembering the normal count means unplugging the real
-      // keyboard is still detected even when one of those interfaces remains.
-      return keyboardDeviceCount >= expected;
-    } catch (_) {
-      return keyboardDeviceCount > 0;
-    }
+    // Keyboard brand, model, USB port, and HID interface count do not matter.
+    // At least one currently present and working physical keyboard means the
+    // keyboard is connected; zero means it is disconnected.
+    return keyboardDeviceCount > 0;
   }
 
   static const String _hardwareScanScript = r'''
@@ -128,6 +95,39 @@ $ErrorActionPreference = 'SilentlyContinue'
 
 function Test-CimDevice([string]$className) {
   return @(Get-CimInstance $className -ErrorAction SilentlyContinue).Count -gt 0
+}
+
+function Get-ConnectedKeyboardCount {
+  $pnpCommand = Get-Command Get-PnpDevice -ErrorAction SilentlyContinue
+
+  if ($null -ne $pnpCommand) {
+    $connectedKeyboards = @(
+      Get-PnpDevice -PresentOnly -Class Keyboard `
+        -ErrorAction SilentlyContinue |
+      Where-Object {
+        $_.Status -eq 'OK' -and
+        ($_.InstanceId + ' ' + $_.FriendlyName + ' ' + $_.Name) -notmatch `
+          'ROOT\\|RDP|REMOTE|VIRTUAL|VMWARE|VMBUS|HYPER-V|CITRIX'
+      }
+    )
+
+    return [int]$connectedKeyboards.Count
+  }
+
+  # Fallback for Windows editions without Get-PnpDevice. Only devices that
+  # Windows currently marks present and error-free are counted.
+  $connectedKeyboards = @(
+    Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+    Where-Object {
+      $_.PNPClass -eq 'Keyboard' -and
+      $_.Present -eq $true -and
+      $_.ConfigManagerErrorCode -eq 0 -and
+      ($_.DeviceID + ' ' + $_.Name) -notmatch `
+        'ROOT\\|RDP|REMOTE|VIRTUAL|VMWARE|VMBUS|HYPER-V|CITRIX'
+    }
+  )
+
+  return [int]$connectedKeyboards.Count
 }
 
 function Get-PhysicalHidDeviceCount(
@@ -209,8 +209,7 @@ function Get-PhysicalHidDeviceCount(
 $cpuOk = Test-CimDevice 'Win32_Processor'
 $ramOk = Test-CimDevice 'Win32_PhysicalMemory'
 $diskOk = Test-CimDevice 'Win32_DiskDrive'
-$keyboardDeviceCount = Get-PhysicalHidDeviceCount `
-  'Keyboard' 'HID_DEVICE_SYSTEM_KEYBOARD|UP:0001_U:0006'
+$keyboardDeviceCount = Get-ConnectedKeyboardCount
 $mouseDeviceCount = Get-PhysicalHidDeviceCount `
   'Mouse' 'HID_DEVICE_SYSTEM_MOUSE|UP:0001_U:0002'
 $keyboardOk = $keyboardDeviceCount -gt 0

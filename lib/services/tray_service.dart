@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
+
+import 'pre_login_kiosk_service.dart';
 
 class TrayService with TrayListener {
   TrayService._();
@@ -43,13 +44,11 @@ class TrayService with TrayListener {
   }
 
   Future<void> hideToTray() async {
-    await windowManager.hide();
+    await PreLoginKioskService.instance.hideToTray();
   }
 
   Future<void> showFromTray() async {
-    await windowManager.show();
-    await windowManager.restore();
-    await windowManager.focus();
+    await PreLoginKioskService.instance.showWindow();
   }
 
   @override

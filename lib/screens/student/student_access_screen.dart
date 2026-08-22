@@ -2,13 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:window_manager/window_manager.dart';
-
 import '../../models/app_user.dart';
 import '../../models/pc_identity.dart';
 import '../../services/app_config_service.dart';
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
+import '../../services/pre_login_kiosk_service.dart';
 import '../../services/student_session_service.dart';
 import '../../services/sync_service.dart';
 import '../../services/theme_service.dart';
@@ -74,6 +73,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     super.initState();
 
     PcMonitorService.instance.beginStudentSession(widget.user.email);
+    unawaited(PreLoginKioskService.instance.releaseAfterLogin());
 
     _entryCtrl = AnimationController(
       vsync: this,
@@ -203,10 +203,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     await AppConfigService.instance.clearStudentApiSession();
     PcMonitorService.instance.endStudentSession();
 
-    try {
-      await TrayService.instance.showFromTray();
-      await windowManager.setFullScreen(true);
-    } catch (_) {}
+    await PreLoginKioskService.instance.lockForLogin();
 
     if (!mounted) return;
 
@@ -247,7 +244,11 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     _sessionHeartbeatTimer?.cancel();
 
     await LocalDbService.instance.logout(widget.loginLogId);
-    await SyncService.instance.syncPendingData();
+    try {
+      await SyncService.instance.syncPendingData();
+    } catch (_) {
+      // Pending records will synchronize when the intranet is available.
+    }
     try {
       await StudentSessionService.instance.logout();
     } catch (_) {
@@ -257,10 +258,7 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
     await AppConfigService.instance.clearStudentApiSession();
     PcMonitorService.instance.endStudentSession();
 
-    try {
-      await windowManager.restore();
-      await windowManager.focus();
-    } catch (_) {}
+    await PreLoginKioskService.instance.lockForLogin();
 
     if (!context.mounted) return;
 
@@ -428,6 +426,15 @@ class _StudentAccessScreenState extends State<StudentAccessScreen>
           const SizedBox(height: 20),
 
           const IssueSupportLauncher(),
+          const SizedBox(height: 8),
+          Text(
+            'ITSO Support: Ctrl + Alt + S  •  Backup: Ctrl + Shift + H',
+            style: TextStyle(
+              color: _textColor.withOpacity(0.45),
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 20),
 
           _buildActionButtons(),

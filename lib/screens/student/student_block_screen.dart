@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/local_db_service.dart';
 import '../../services/pc_monitor_service.dart';
+import '../../services/pre_login_kiosk_service.dart';
 import '../../services/sync_service.dart';
 import '../../services/theme_service.dart';
 import 'student_login_screen.dart';
@@ -31,6 +34,7 @@ class _StudentBlockScreenState extends State<StudentBlockScreen> {
   void initState() {
     super.initState();
     PcMonitorService.instance.beginStudentSession(widget.studentEmail);
+    unawaited(PreLoginKioskService.instance.releaseAfterLogin());
   }
 
   Future<void> _endSession() async {
@@ -38,8 +42,13 @@ class _StudentBlockScreenState extends State<StudentBlockScreen> {
     setState(() => _endingSession = true);
 
     await LocalDbService.instance.markStudentSessionEnded(widget.logId);
-    await SyncService.instance.syncPendingData();
+    try {
+      await SyncService.instance.syncPendingData();
+    } catch (_) {
+      // Pending records will synchronize when the intranet is available.
+    }
     PcMonitorService.instance.endStudentSession();
+    await PreLoginKioskService.instance.lockForLogin();
 
     if (!mounted) return;
 

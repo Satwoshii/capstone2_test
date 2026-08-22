@@ -17,10 +17,13 @@ class SupportCenterScreen extends StatefulWidget {
 
 class _SupportCenterScreenState extends State<SupportCenterScreen>
     with TickerProviderStateMixin {
+  final _searchController = TextEditingController();
   Timer? _timer;
   List<SupportIssue> _conversations = const [];
+  SupportIssue? _selectedConversation;
   bool _loading = true;
   bool _refreshing = false;
+  bool _showUnreadOnly = false;
   String? _error;
 
   late final AnimationController _entryCtrl;
@@ -39,9 +42,24 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
   Color get _borderCol  =>
       _dark ? const Color(0x12FFFFFF) : Colors.black.withOpacity(0.09);
 
+  List<SupportIssue> get _visibleConversations {
+    final query = _searchController.text.trim().toLowerCase();
+    return _conversations.where((item) {
+      if (_showUnreadOnly && item.unreadCount <= 0) return false;
+      if (query.isEmpty) return true;
+      return item.subject.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query) ||
+          item.details.toLowerCase().contains(query) ||
+          item.issue.toLowerCase().contains(query) ||
+          item.roomName.toLowerCase().contains(query) ||
+          item.pcId.toLowerCase().contains(query);
+    }).toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_onSearchChanged);
     _refresh();
     _timer = Timer.periodic(const Duration(seconds: 6), (_) => _refresh());
 
@@ -55,8 +73,15 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _searchController
+      ..removeListener(_onSearchChanged)
+      ..dispose();
     _entryCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _refresh() async {
@@ -77,6 +102,21 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
       if (!mounted) return;
       setState(() {
         _conversations = rows;
+        if (rows.isEmpty) {
+          _selectedConversation = null;
+        } else if (_selectedConversation == null) {
+          _selectedConversation = rows.first;
+        } else {
+          final selectedId = _selectedConversation!.conversationId;
+          SupportIssue? refreshedSelection;
+          for (final row in rows) {
+            if (row.conversationId == selectedId) {
+              refreshedSelection = row;
+              break;
+            }
+          }
+          _selectedConversation = refreshedSelection ?? rows.first;
+        }
         _loading = false;
         _error = null;
       });
@@ -99,6 +139,11 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
       ),
     );
     if (!mounted || conversation == null) return;
+    if (_isDesktopLayout) {
+      setState(() => _selectedConversation = conversation);
+      await _refresh();
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -109,6 +154,10 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
   }
 
   Future<void> _open(SupportIssue conversation) async {
+    if (_isDesktopLayout) {
+      setState(() => _selectedConversation = conversation);
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -118,45 +167,409 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
     await _refresh();
   }
 
+  bool get _isDesktopLayout => MediaQuery.of(context).size.width >= 980;
+
   @override
   Widget build(BuildContext context) {
+    final desktop = _isDesktopLayout;
     return Scaffold(
       backgroundColor: _bgColor,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(),
-      floatingActionButton: _buildFab(),
-      body: Stack(
-        children: [
-          _buildAmbientOrbs(),
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: _buildBody(),
+      appBar: desktop ? null : _buildAppBar(),
+      floatingActionButton: desktop ? null : _buildFab(),
+      body: desktop
+          ? _buildDesktopLayout()
+          : Stack(
+              children: [
+                _buildAmbientOrbs(),
+                SafeArea(
+                  top: false,
+                  child: FadeTransition(
+                    opacity: _fadeAnim,
+                    child: SlideTransition(
+                      position: _slideAnim,
+                      child: _buildBody(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    final selected = _selectedConversation;
+    return Row(
+      children: [
+        SizedBox(
+          width: 380,
+          child: _buildDesktopSidebar(),
+        ),
+        VerticalDivider(width: 1, thickness: 1, color: _borderCol),
+        Expanded(
+          child: selected == null
+              ? _buildDesktopEmptyConversation()
+              : SupportChatScreen(
+                  key: ValueKey(selected.conversationId),
+                  issue: selected,
+                  embedded: true,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopSidebar() {
+    final visible = _visibleConversations;
+    final unread = _conversations.fold<int>(
+      0,
+      (total, item) => total + item.unreadCount,
+    );
+
+    return Material(
+      color: _cardColor,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.maybePop(context),
+                    icon: Icon(
+                      Icons.arrow_back_rounded,
+                      color: _textColor.withOpacity(0.88),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: Text(
+                      'Chats',
+                      style: TextStyle(
+                        color: _textColor,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  _buildSidebarAction(
+                    tooltip: 'Toggle theme',
+                    icon: _dark
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
+                    onPressed: () => ThemeService.instance.toggleTheme(),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildSidebarAction(
+                    tooltip: 'New support request',
+                    icon: Icons.edit_rounded,
+                    onPressed: _newRequest,
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(color: _textColor, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search chats',
+                  hintStyle: TextStyle(color: _textColor.withOpacity(0.45)),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: _textColor.withOpacity(0.55),
+                  ),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          onPressed: _searchController.clear,
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                        ),
+                  filled: true,
+                  fillColor: _fieldColor,
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  _buildDesktopFilter(
+                    label: 'All',
+                    selected: !_showUnreadOnly,
+                    onTap: () => setState(() => _showUnreadOnly = false),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildDesktopFilter(
+                    label: unread > 0 ? 'Unread  $unread' : 'Unread',
+                    selected: _showUnreadOnly,
+                    onTap: () => setState(() => _showUnreadOnly = true),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Refresh conversations',
+                    onPressed: _refreshing ? null : _refresh,
+                    icon: _refreshing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            Icons.refresh_rounded,
+                            color: _textColor.withOpacity(0.55),
+                            size: 20,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: _borderCol),
+            Expanded(
+              child: _buildDesktopConversationList(visible),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildSidebarAction({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: _fieldColor,
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        icon: Icon(icon, color: _textColor.withOpacity(0.82), size: 20),
+      ),
+    );
+  }
+
+  Widget _buildDesktopFilter({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected ? _accA.withOpacity(0.18) : Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? _accA : _textColor.withOpacity(0.72),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopConversationList(List<SupportIssue> visible) {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: _accA),
+      );
+    }
+    if (_error != null && _conversations.isEmpty) {
+      return _buildSidebarState(
+        icon: Icons.cloud_off_rounded,
+        title: 'Could not load chats',
+        message: _error!,
+        actionLabel: 'Retry',
+        onAction: _refresh,
+      );
+    }
+    if (_conversations.isEmpty) {
+      return _buildSidebarState(
+        icon: Icons.forum_outlined,
+        title: 'No conversations yet',
+        message: 'Create a request to message ITSO Support.',
+        actionLabel: 'New message',
+        onAction: _newRequest,
+      );
+    }
+    if (visible.isEmpty) {
+      return _buildSidebarState(
+        icon: Icons.search_off_rounded,
+        title: 'No chats found',
+        message: _showUnreadOnly
+            ? 'There are no unread conversations.'
+            : 'Try another search term.',
+        actionLabel: 'Show all',
+        onAction: () {
+          _searchController.clear();
+          setState(() => _showUnreadOnly = false);
+        },
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      itemCount: visible.length,
+      itemBuilder: (context, index) => _buildConversationTile(
+        visible[index],
+        desktop: true,
+      ),
+    );
+  }
+
+  Widget _buildSidebarState({
+    required IconData icon,
+    required String title,
+    required String message,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: _textColor.withOpacity(0.30), size: 42),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _textColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _textColor.withOpacity(0.50),
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(onPressed: onAction, child: Text(actionLabel)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopEmptyConversation() {
+    return Stack(
+      children: [
+        Positioned.fill(child: _buildAmbientOrbs()),
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 82,
+                height: 82,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [_accA, _accB],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.forum_rounded,
+                  color: Colors.white,
+                  size: 38,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'ITSO Support Messages',
+                style: TextStyle(
+                  color: _textColor,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                'Select a chat or create a new support request.',
+                style: TextStyle(
+                  color: _textColor.withOpacity(0.52),
+                  fontSize: 13.5,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: _newRequest,
+                icon: const Icon(Icons.edit_rounded, size: 18),
+                label: const Text('New message'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: _cardColor,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      title: ShaderMask(
-        shaderCallback: (bounds) => const LinearGradient(
-          colors: [_accA, _accB],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ).createShader(bounds),
-        child: const Text(
-          'ITSO Support',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-        ),
+      shape: Border(bottom: BorderSide(color: _borderCol)),
+      title: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [_accA, _accB],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: const Icon(Icons.support_agent_rounded, color: Colors.white, size: 21),
+          ),
+          const SizedBox(width: 11),
+          Text(
+            'Messages',
+            style: TextStyle(
+              color: _textColor,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
       ),
       iconTheme: IconThemeData(color: _textColor.withOpacity(0.85)),
       actions: [
@@ -211,7 +624,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         icon: const Icon(Icons.add_comment_rounded),
-        label: const Text('New Request', style: TextStyle(fontWeight: FontWeight.w700)),
+        label: const Text('New message', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -246,14 +659,122 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
       );
     }
 
-    return RefreshIndicator(
-      color: _accA,
-      backgroundColor: _cardColor,
-      onRefresh: _refresh,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-        itemCount: _conversations.length,
-        itemBuilder: (context, index) => _buildConversationTile(_conversations[index]),
+    final visible = _visibleConversations;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: Column(
+          children: [
+            _buildInboxHeader(),
+            Expanded(
+              child: visible.isEmpty
+                  ? _buildNoSearchResults()
+                  : RefreshIndicator(
+                      color: _accA,
+                      backgroundColor: _cardColor,
+                      onRefresh: _refresh,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) =>
+                            _buildConversationTile(visible[index]),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInboxHeader() {
+    final unread = _conversations.fold<int>(
+      0,
+      (total, item) => total + item.unreadCount,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'ITSO Support',
+                  style: TextStyle(
+                    color: _textColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (unread > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _accA.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    '$unread unread',
+                    style: const TextStyle(
+                      color: _accA,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Your conversations with the ITSO team',
+            style: TextStyle(color: _textColor.withOpacity(0.55), fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _searchController,
+            style: TextStyle(color: _textColor, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Search conversations',
+              hintStyle: TextStyle(color: _textColor.withOpacity(0.38)),
+              prefixIcon: Icon(Icons.search_rounded, color: _textColor.withOpacity(0.45)),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: _searchController.clear,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+              filled: true,
+              fillColor: _fieldColor,
+              border: OutlineInputBorder(
+                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoSearchResults() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off_rounded, color: _textColor.withOpacity(0.35), size: 44),
+          const SizedBox(height: 10),
+          Text(
+            'No matching conversations',
+            style: TextStyle(color: _textColor, fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 5),
+          TextButton(onPressed: _searchController.clear, child: const Text('Clear search')),
+        ],
       ),
     );
   }
@@ -341,78 +862,187 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
     );
   }
 
-  Widget _buildConversationTile(SupportIssue item) {
+  Widget _buildConversationTile(
+    SupportIssue item, {
+    bool desktop = false,
+  }) {
     final hasUnread = item.unreadCount > 0;
+    final isSelected = desktop &&
+        _selectedConversation?.conversationId == item.conversationId;
     final statusText = _statusLabel(item.conversationStatus ?? 'open');
+    final statusColor = _statusColor(item.conversationStatus ?? 'open');
+    final preview = item.details.trim().isNotEmpty
+        ? item.details.trim()
+        : item.issue.trim();
+    final activityTime = item.updatedAt ?? item.createdAt;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: desktop ? 2 : 6),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(desktop ? 12 : 16),
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(desktop ? 12 : 16),
           onTap: () => _open(item),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: _cardColor,
-              borderRadius: BorderRadius.circular(18),
+              color: isSelected
+                  ? _accA.withOpacity(_dark ? 0.20 : 0.13)
+                  : hasUnread
+                      ? _accA.withOpacity(_dark ? 0.09 : 0.06)
+                      : desktop
+                          ? Colors.transparent
+                          : _cardColor.withOpacity(_dark ? 0.86 : 0.92),
+              borderRadius: BorderRadius.circular(desktop ? 12 : 16),
               border: Border.all(
-                color: hasUnread ? _accA.withOpacity(0.35) : _borderCol,
+                color: desktop
+                    ? Colors.transparent
+                    : hasUnread
+                        ? _accA.withOpacity(0.24)
+                        : _borderCol,
               ),
             ),
             child: Row(
               children: [
-                Container(
-                  width: 46, height: 46,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(13),
-                    gradient: LinearGradient(
-                      colors: [_accA.withOpacity(0.16), _accB.withOpacity(0.10)],
-                      begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    ),
+                SizedBox(
+                  width: 54,
+                  height: 54,
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 54,
+                        height: 54,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [_accA, _accB],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Icon(
+                          _categoryIcon(item.category),
+                          color: Colors.white,
+                          size: 23,
+                        ),
+                      ),
+                      Positioned(
+                        right: 1,
+                        bottom: 1,
+                        child: Container(
+                          width: 13,
+                          height: 13,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: _cardColor, width: 2),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  child: Icon(_categoryIcon(item.category), color: _accA, size: 21),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 13),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.subject,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: _textColor, fontSize: 15, fontWeight: FontWeight.w700),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.subject,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _textColor,
+                                fontSize: 14.5,
+                                fontWeight: hasUnread
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (activityTime != null) ...[
+                            const SizedBox(width: 10),
+                            Text(
+                              _conversationTime(activityTime),
+                              style: TextStyle(
+                                color: hasUnread
+                                    ? _accA
+                                    : _textColor.withOpacity(0.42),
+                                fontSize: 11,
+                                fontWeight: hasUnread
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 5),
-                      Text(
-                        '${_categoryLabel(item.category)} · ${item.roomName} - ${item.pcId}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: _textColor.withOpacity(0.55), fontSize: 12.5),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              preview.isEmpty
+                                  ? '${_categoryLabel(item.category)} · ${item.roomName} - ${item.pcId}'
+                                  : preview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _textColor.withOpacity(hasUnread ? 0.72 : 0.53),
+                                fontSize: 12.5,
+                                fontWeight: hasUnread
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                          if (hasUnread) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              constraints: const BoxConstraints(minWidth: 22),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _accA,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                item.unreadCount > 99 ? '99+' : '${item.unreadCount}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 7),
-                      _buildStatusPill(statusText),
+                      Row(
+                        children: [
+                          _buildStatusPill(statusText, statusColor),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              '${_categoryLabel(item.category)} · ${item.roomName} - ${item.pcId}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _textColor.withOpacity(0.40),
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                if (hasUnread)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [_accA, _accB]),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${item.unreadCount}',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  )
-                else
-                  Icon(Icons.chevron_right_rounded, color: _textColor.withOpacity(0.30)),
               ],
             ),
           ),
@@ -421,17 +1051,21 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
     );
   }
 
-  Widget _buildStatusPill(String statusText) {
+  Widget _buildStatusPill(String statusText, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: _fieldColor,
+        color: color.withOpacity(0.11),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderCol),
       ),
       child: Text(
         statusText.toUpperCase(),
-        style: TextStyle(color: _textColor.withOpacity(0.55), fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.6),
+        style: TextStyle(
+          color: color,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.45,
+        ),
       ),
     );
   }
@@ -486,4 +1120,40 @@ String _statusLabel(String value) {
       ? ''
       : '${word[0].toUpperCase()}${word.substring(1)}')
       .join(' ');
+}
+
+Color _statusColor(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'resolved':
+    case 'closed':
+      return const Color(0xFF667085);
+    case 'waiting_for_student':
+      return const Color(0xFFF59E0B);
+    case 'in_progress':
+      return const Color(0xFF7B61FF);
+    default:
+      return const Color(0xFF31C48D);
+  }
+}
+
+String _conversationTime(DateTime value) {
+  final local = value.toLocal();
+  final now = DateTime.now();
+  final sameDay = local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
+  if (sameDay) {
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+  final yesterday = DateTime(now.year, now.month, now.day)
+      .subtract(const Duration(days: 1));
+  if (local.year == yesterday.year &&
+      local.month == yesterday.month &&
+      local.day == yesterday.day) {
+    return 'Yesterday';
+  }
+  return '${local.month}/${local.day}/${local.year}';
 }
