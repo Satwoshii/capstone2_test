@@ -262,10 +262,21 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
                     onPressed: () => ThemeService.instance.toggleTheme(),
                   ),
                   const SizedBox(width: 8),
-                  _buildSidebarAction(
-                    tooltip: 'New support request',
-                    icon: Icons.edit_rounded,
+                  FilledButton.icon(
                     onPressed: _newRequest,
+                    icon: const Icon(Icons.edit_rounded, size: 16),
+                    label: const Text(
+                      'Report Issue',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _accA.withOpacity(0.12),
+                      foregroundColor: _accA,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      minimumSize: const Size(0, 36),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
                   ),
                 ],
               ),
@@ -410,7 +421,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
         icon: Icons.forum_outlined,
         title: 'No conversations yet',
         message: 'Create a request to message ITSO Support.',
-        actionLabel: 'New message',
+        actionLabel: 'Report Issue',
         onAction: _newRequest,
       );
     }
@@ -529,7 +540,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
               FilledButton.icon(
                 onPressed: _newRequest,
                 icon: const Icon(Icons.edit_rounded, size: 18),
-                label: const Text('New message'),
+                label: const Text('Report Issue'),
               ),
             ],
           ),
@@ -623,8 +634,8 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
         onPressed: _newRequest,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        icon: const Icon(Icons.add_comment_rounded),
-        label: const Text('New message', style: TextStyle(fontWeight: FontWeight.w700)),
+        icon: const Icon(Icons.edit_rounded),
+        label: const Text('Report Issue', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -653,7 +664,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
           title: 'How can ITSO help?',
           message: 'Create a support request for hardware, software, network, '
               'account, or general laboratory assistance.',
-          actionLabel: 'Start a Conversation',
+          actionLabel: 'Report Issue',
           onAction: _newRequest,
         ),
       );
@@ -852,7 +863,7 @@ class _SupportCenterScreenState extends State<SupportCenterScreen>
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
-                icon: Icon(actionLabel == 'Retry' ? Icons.refresh_rounded : Icons.add_comment_rounded, size: 18),
+                icon: Icon(actionLabel == 'Retry' ? Icons.refresh_rounded : Icons.edit_rounded, size: 18),
                 label: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
             ),
